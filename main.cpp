@@ -8,7 +8,7 @@
 #include "Arduino.h"           // Standardowy nagłówek Arduino, który dostarcza podstawowe funkcje i definicje
 #include "Audio.h"             // Biblioteka do obsługi funkcji związanych z dźwiękiem i audio
 #include "SPI.h"               // Biblioteka do obsługi komunikacji SPI
-#include "SPIFFS.h"                // Biblioteka do obsługi kart SPIFFS
+#include "SPIFFS.h"            // Biblioteka do obsługi kart SPIFFS
 #include "FS.h"                // Biblioteka do obsługi systemu plików
 #include <U8g2lib.h>           // Biblioteka do obsługi wyświetlaczy
 #include <ezButton.h>          // Biblioteka do obsługi enkodera z przyciskiem
@@ -24,12 +24,6 @@
 // Deklaracja wersji oprogramowania i nazwy hosta widocznego w routerze oraz na ekranie OLED i stronie www
 #define softwareRev "v3.17.60"  // Wersja oprogramowania radia
 #define hostname "ESP32-Radio"  // Definicja nazwy hosta widoczna na zewnątrz
-
-// Definicja pinow czytnika karty SPIFFS
-#define SPIFFS_CS 47    // Pin CS (Chip Select) dla karty SPIFFS wybierany jako interfejs SPI
-#define SPIFFS_SCLK 45  // Pin SCK (Serial Clock) dla karty SPIFFS
-#define SPIFFS_MISO 21  // Pin MISO (Master In Slave Out) dla karty SPIFFS
-#define SPIFFS_MOSI 48  // pin MOSI (Master Out Slave In) dla karty SPIFFS
 
 // Definicja pinow dla wyswietlacza OLED 
 #define SPI_MOSI_OLED 39  // Pin MOSI (Master Out Slave In) dla interfejsu SPI OLED
@@ -192,7 +186,7 @@ bool action3Taken = false;        // Flaga Akcji 3 - załaczenia VU
 bool ActionNeedUpdateTime = false;// Zmiena okresaljaca dla displayRadio potrzebe odczytu aktulizacji czasu
 bool debugAudioBuffor = false;    // Wyswietlanie bufora Audio
 bool audioInfoRefresh = false;    // Flaga wymuszjąca wymagane odsiwezenie ze względu na zmianę info stream
-bool noSPIFFScard = false;        // flaga ustawiana przy braku wykrycia karty SPIFFS
+bool noSPIFFSmemory = false;      // flaga ustawiana przy braku wykrycia SPIFFS
 bool resumePlay = false;          // Flaga wymaganego uruchomienia odtwarzania po zakonczeniu komunikatu głosowego
 bool fwupd = false;               // Flaga blokujaca main loop podczas aktualizacji oprogramowania
 //bool displayBufforSendRquest = false;
@@ -1590,16 +1584,15 @@ void bankMenuDisplay()
   u8g2.setFont(u8g2_font_fub14_tf);
   u8g2.drawStr(80, 33, "BANK ");
   u8g2.drawStr(145, 33, String(bank_nr).c_str());  // numer banku
-  if ((bankNetworkUpdate == true) || (noSPIFFScard == true))
+  if ((bankNetworkUpdate == true) || (noSPIFFSmemory == true))
   {
     u8g2.setFont(spleen6x12PL);
     u8g2.drawStr(185, 24, "NETWORK ");
     u8g2.drawStr(188, 34, "UPDATE  ");
     
-    if (noSPIFFScard == true)
+    if (noSPIFFSmemory == true)
     {
       u8g2.drawStr(24, 24, "NO SPIFFS");
-      //u8g2.drawStr(24, 34, "NO CARD");
     }
   
   }
@@ -1740,7 +1733,7 @@ void scrollUp() {
 void readVolumeFromSPIFFS() 
 {
   // Sprawdź, czy karta SPIFFS jest dostępna
-  if (!SPIFFS.begin(SPIFFS_CS)) 
+  if (!SPIFFS.begin(true)) 
   {
     Serial.println("Nie można znaleźć karty SPIFFS, ustawiam wartość Volume z EEPROMu.");
     Serial.print("Wartość Volume: ");
@@ -1830,7 +1823,7 @@ void saveVolumeOnSPIFFS()
       Serial.println("Błąd podczas tworzenia pliku volume.txt.");
      }
   }
-  if (noSPIFFScard == true) {EEPROM.write(2,volumeValue); EEPROM.commit();}
+  if (noSPIFFSmemory == true) {EEPROM.write(2,volumeValue); EEPROM.commit();}
 }
 
 void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print)
@@ -2036,7 +2029,7 @@ void saveStationOnSPIFFS() {
     }
   }
   
-  if (noSPIFFScard == true)
+  if (noSPIFFSmemory == true)
   {
     Serial.println("Brak karty SPIFFS zapisujemy do EEPROM");
     EEPROM.write(0, station_nr);
@@ -2524,7 +2517,7 @@ void saveEqualizerOnSPIFFS()
 void readEqualizerFromSPIFFS() 
 {
   // Sprawdź, czy karta SPIFFS jest dostępna
-  if (!SPIFFS.begin(SPIFFS_CS)) 
+  if (!SPIFFS.begin(true)) 
   {
     Serial.println("Nie można znaleźć karty SPIFFS, ustawiam domyślne wartości filtrow Equalziera.");
     toneHiValue = 0;  // Domyślna wartość filtra gdy brak karty SPIFFS
@@ -2575,9 +2568,9 @@ void readEqualizerFromSPIFFS()
 // Funkcja do odczytu danych stacji radiowej z karty SPIFFS
 void readStationFromSPIFFS() {
   // Sprawdź, czy karta SPIFFS jest dostępna
-  if (!SPIFFS.begin(SPIFFS_CS)) {
+  if (!SPIFFS.begin(true)) {
     //Serial.println("Nie można znaleźć karty SPIFFS. Ustawiam domyślne wartości: Station=1, Bank=1.");
-    Serial.println("Nie można znaleźć karty SPIFFS, ustawiam wartości z EEPROMu");
+    Serial.println("Nie można znaleźć SPIFFS, ustawiam wartości z EEPROMu");
     //station_nr = 1;  // Domyślny numer stacji gdy brak karty SPIFFS
     //bank_nr = 1;     // Domyślny numer banku gdy brak karty SPIFFS
     EEPROM.get(0, station_nr);
@@ -4407,7 +4400,7 @@ void assignRemoteCodes()
   Serial.print("IR Config - assignRemoteCodes, configIrExist: ");
   Serial.println(configIrExist);
 
-  if ((noSPIFFScard == false) && (configIrExist == true)) 
+  if ((noSPIFFSmemory == false) && (configIrExist == true)) 
   {
   Serial.println("IR config - Przypisuje wartosci z pliku Remote.txt");
   rcCmdVolumeUp = configRemoteArray[0];    // Głosnosc +
@@ -4437,7 +4430,7 @@ void assignRemoteCodes()
   rcCmdKey8 = configRemoteArray[24];       // Przycisk "8"
   rcCmdKey9 = configRemoteArray[25];       // Przycisk "9"
   }
-  else if ((noSPIFFScard == true) || (configIrExist == false)) // Jesli nie ma karty SPIFFS przypisujemy standardowe wartosci dla pilota Kenwood RC-406
+  else if ((noSPIFFSmemory == true) || (configIrExist == false)) // Jesli nie ma karty SPIFFS przypisujemy standardowe wartosci dla pilota Kenwood RC-406
   {
     Serial.println("IR Config - Przypisuje wartosci domyslne");
     rcCmdVolumeUp = 0xB914;   // Głosnosc +
@@ -4586,12 +4579,7 @@ void setup()
   audioBuffer.changeMaxBlockSize(16384);
   wifiManager.setHostname(hostname);
   
-  EEPROM.begin(128);
-
-  // Ustaw pin CS dla karty SPIFFS jako wyjście i ustaw go na wysoki stan
-  pinMode(SPIFFS_CS, OUTPUT);
-  digitalWrite(SPIFFS_CS, HIGH);
-
+  EEPROM.begin(128); // Inicjalizacja EEPROM
 
   // Konfiguruj piny enkodera jako wejścia
   pinMode(CLK_PIN2, INPUT_PULLUP);
@@ -4617,7 +4605,7 @@ void setup()
   SPI.setFrequency(1000000);
 
   // Inicjalizacja SPI z nowymi pinami dla czytnika kart SPIFFS
-  customSPI.begin(SPIFFS_SCLK, SPIFFS_MISO, SPIFFS_MOSI, SPIFFS_CS);  // SCLK = 45, MISO = 21, MOSI = 48, CS = 47
+  //customSPI.begin(SPIFFS_SCLK, SPIFFS_MISO, SPIFFS_MOSI, SPIFFS_CS);  // SCLK = 45, MISO = 21, MOSI = 48, CS = 47
   // Inicjalizuj wyświetlacz i odczekaj 250 milisekund na włączenie
   u8g2.begin();
   delay(250);
@@ -4632,12 +4620,11 @@ void setup()
   u8g2.drawStr(226, 62, softwareRev);
   u8g2.sendBuffer();
 
-  // Inicjalizacja karty SPIFFS
-  //if (!SPIFFS.begin(SPIFFS_CS, customSPI)) 
-  if (!SPIFFS.begin(true))    // jesli chcemy uzwać pamieci SPIFFS zamieniamy wszystkie wpisy "SPIFFS." na "SPIFFS."
+  // Inicjalizacja SPIFFS
+  if (!SPIFFS.begin(true))
   {
     // Informacja na wyswietlaczu o problemach lub braku karty SPIFFS
-    Serial.println("Błąd inicjalizacji karty SPIFFS!");
+    Serial.println("Błąd inicjalizacji SPIFFS!");
     //u8g2.clearBuffer();
     u8g2.setFont(spleen6x12PL);
     u8g2.drawStr(5, 62, "Error - Please check SPIFFS");
@@ -4648,7 +4635,7 @@ void setup()
     u8g2.sendBuffer();
   //  while(true) {;;} // Zostajemy tutaj az do resetu i ponownego sprawdzenia karty
   //  return;
-    noSPIFFScard = true; // Flaga braku karty SPIFFS, będziemy użwyać EEPROM 
+    noSPIFFSmemory = true; // Flaga braku karty SPIFFS, będziemy użwyać EEPROM 
     delay(2000);
   }
   else
