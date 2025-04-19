@@ -1479,14 +1479,14 @@ void audio_info(const char *info)
     vorbis = false;
     opus = false;
   }
-  if (String(info).indexOf("VORBISPIFFSecoder") != -1) {
+  if (String(info).indexOf("VORBISDecoder") != -1) {
     vorbis = true;
     aac = false;
     flac = false;
     mp3 = false;
     opus = false;
   }
-  if (String(info).indexOf("OPUSPIFFSecoder") != -1) {
+  if (String(info).indexOf("OPUSDecoder") != -1) {
     opus = true;
     vorbis = false;
     aac = false;
@@ -3377,9 +3377,9 @@ void recoveryModeCheck()
 }
 void displayDimmer(bool dimmerON)
 {
-  displayDimmerActive = dimmerON;
-  Serial.print("displayDimmerActive: ");
-  Serial.println(displayDimmerActive);
+  //displayDimmerActive = dimmerON;
+  //Serial.print("displayDimmerActive: ");
+  //Serial.println(displayDimmerActive);
   //if ((dimmerON == 1) && (displayBrightness == 15)) { u8g2.sendF("ca", 0xC7, dimmerDisplayBrightness);}
   
   if ((dimmerON == 1) && (displayActive == false) && (fwupd == false)) { u8g2.setContrast(dimmerDisplayBrightness);}
@@ -4820,7 +4820,6 @@ void setup()
         u8g2.clearBuffer();
         u8g2.setCursor(5, 24); u8g2.print("Firmware Updated!");
         u8g2.setCursor(5, 36); u8g2.print("Rebooting...");
-        u8g2.setCursor(5, 48); u8g2.print("See you soon :)");
         u8g2.sendBuffer();
 
         // Odpowiedź HTML z ładną stroną i przekierowaniem
@@ -5876,7 +5875,7 @@ void loop()
         }
         displayRadio();
       }
-      else if (ir_code == rcCmdDirect) // Przycisk Direct -> Menu Bank - udpate GitHub, Menu Equalizer - reset wartosci, Radio Display - fnkcja przyciemniania ekranu
+      else if (ir_code == rcCmdDirect) // Przycisk Direct -> Menu Bank - udpate GitHub, Menu Equalizer - reset wartosci, Radio Display - funkcja przyciemniania ekranu
       {
         if ((bankMenuEnable == true) && (equalizerMenuEnable == false))// flage można zmienic tylko bedąc w menu wyboru banku
         { 
@@ -5893,8 +5892,20 @@ void loop()
         if ((bankMenuEnable == false) && (equalizerMenuEnable == false) && (volumeSet == false))
         { 
           
-          displayDimmer(!displayDimmerActive); // Dimmer OLED
-          Serial.println("Właczono display Dimmer rcCmdDirect");
+          displayDimmerActive = !displayDimmerActive;         // zmień stan
+          displayDimmer(displayDimmerActive);                 // ustaw OLED
+
+          Serial.print("displayDimmerActive: ");
+          Serial.println(displayDimmerActive);
+
+          if (displayDimmerActive) {
+              Serial.println("Włączono przyciemnienie OLED");
+          } else {
+              Serial.println("Wyłączono przyciemnienie OLED (rozjaśniono)");
+          }
+          
+          //displayDimmer(!displayDimmerActive); // Dimmer OLED
+          //Serial.println("Właczono display Dimmer rcCmdDirect");
           /*
           if (displayDimmerActive == 1) 
           {       
@@ -6083,4 +6094,3 @@ void loop()
   //runTime2 = esp_timer_get_time();
   //runTime = runTime2 - runTime1;  
 }
-
