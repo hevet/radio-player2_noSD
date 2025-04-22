@@ -8,7 +8,7 @@
 #include "Arduino.h"           // Standardowy nagłówek Arduino, który dostarcza podstawowe funkcje i definicje
 #include "Audio.h"             // Biblioteka do obsługi funkcji związanych z dźwiękiem i audio
 #include "SPI.h"               // Biblioteka do obsługi komunikacji SPI
-#include "SPIFFS.h"            // Biblioteka do obsługi kart SPIFFS
+#include "SPIFFS.h"                // Biblioteka do obsługi kart SPIFFS
 #include "FS.h"                // Biblioteka do obsługi systemu plików
 #include <U8g2lib.h>           // Biblioteka do obsługi wyświetlaczy
 #include <ezButton.h>          // Biblioteka do obsługi enkodera z przyciskiem
@@ -20,10 +20,17 @@
 #include <ESPAsyncWebServer.h> // Bliblioteka asyncrhionicznego serwera web
 #include <AsyncTCP.h>          // Bliblioteka TCP dla serwera web
 #include <Update.h>            // Blibioteka dla aktulizacji OTA
+#include <ESPmDNS.h>
 
 // Deklaracja wersji oprogramowania i nazwy hosta widocznego w routerze oraz na ekranie OLED i stronie www
-#define softwareRev "v3.17.60"  // Wersja oprogramowania radia
-#define hostname "ESP32-Radio"  // Definicja nazwy hosta widoczna na zewnątrz
+#define softwareRev "v3.17.65"  // Wersja oprogramowania radia
+#define hostname "esp32radio"  // Definicja nazwy hosta widoczna na zewnątrz
+
+// Definicja pinow czytnika karty SPIFFS
+//#define SPIFFS_CS 47    // Pin CS (Chip Select) dla karty SPIFFS wybierany jako interfejs SPI
+//#define SPIFFS_SCLK 45  // Pin SCK (Serial Clock) dla karty SPIFFS
+//#define SPIFFS_MISO 21  // Pin MISO (Master In Slave Out) dla karty SPIFFS
+//#define SPIFFS_MOSI 48  // pin MOSI (Master Out Slave In) dla karty SPIFFS
 
 // Definicja pinow dla wyswietlacza OLED 
 #define SPI_MOSI_OLED 39  // Pin MOSI (Master Out Slave In) dla interfejsu SPI OLED
@@ -87,7 +94,7 @@ uint16_t rcCmdOk = 0;         // Przycisk Ent - zatwierdzenie stacji
 uint16_t rcCmdSrc = 0;        // Przełączanie źródła radio, odtwarzacz
 uint16_t rcCmdMute = 0;       // Wyciszenie dzwieku
 uint16_t rcCmdAud = 0;        // Equalizer dzwieku
-uint16_t rcCmdDirect = 0;     // Janość ekranu, dwa tryby 1/16 lub pełna janość     
+uint16_t rcCmdDirect = 0;     // Jasność ekranu, dwa tryby 1/16 lub pełna jasność     
 uint16_t rcCmdBankMinus = 0;  // Wysweitla wybór banku
 uint16_t rcCmdBankPlus = 0;   // Wysweitla wybór banku
 uint16_t rcCmdRed = 0;        // Przełacza ładowanie banku kartaSPIFFS - serwer GitHub w menu bank
@@ -111,18 +118,18 @@ int stationFromBuffer = 0;      // Numer stacji radiowej przechowywanej w buforz
 uint8_t bank_nr;                // Numer aktualnie wybranego banku stacji z listy
 uint8_t previous_bank_nr = 0;   // Numer banku przed wejsciem do menu zmiany banku
 int bankFromBuffer = 0;         // Numer aktualnie wybranego banku stacji z listy do przywrócenia na ekran po bezczynności
-int CLK_state2;                        // Aktualny stan CLK enkodera lewego
-int prev_CLK_state2;                   // Poprzedni stan CLK enkodera lewego
-int stationsCount = 0;                 // Aktualna liczba przechowywanych stacji w tablicy
-//int fileFromBuffer = 0;                // Numer aktualnie wybranego pliku do przywrócenia na ekran po bezczynności
-uint8_t volumeValue = 10;                  // Wartość głośności, domyślnie ustawiona na 10
-uint8_t volumeBufferValue = 0;             // Wartość głośności, domyślnie ustawiona na 10
+int CLK_state2;                 // Aktualny stan CLK enkodera lewego
+int prev_CLK_state2;            // Poprzedni stan CLK enkodera lewego
+int stationsCount = 0;          // Aktualna liczba przechowywanych stacji w tablicy
+//int fileFromBuffer = 0;       // Numer aktualnie wybranego pliku do przywrócenia na ekran po bezczynności
+uint8_t volumeValue = 10;       // Wartość głośności, domyślnie ustawiona na 10
+uint8_t volumeBufferValue = 0;  // Wartość głośności, domyślnie ustawiona na 10
 int maxVisibleLines = 4;               // Maksymalna liczba widocznych linii na ekranie OLED
 int bitrateStringInt = 0;              // Deklaracja zmiennej do konwersji Bitrate string na wartosc Int aby podzelic bitrate przez 1000
 int buttonLongPressTime2 = 2000;       // Czas reakcji na długie nacisniecie enkoder 2
 int buttonShortPressTime2 = 500;       // Czas rekacjinna krótkie nacisniecie enkodera 2
 int buttonSuperLongPressTime2 = 4000;  // Czas reakcji na super długie nacisniecie enkoder 2
-uint8_t stationNameLenghtCut = 24;    // 24-> 25 znakow, 25-> 26 znaków, zmienna określająca jak długa nazwę ma nazwa stacji w plikach Bankow liczone od 0- wartosci ustalonej
+uint8_t stationNameLenghtCut = 24;     // 24-> 25 znakow, 25-> 26 znaków, zmienna określająca jak długa nazwę ma nazwa stacji w plikach Bankow liczone od 0- wartosci ustalonej
 
 // ---- Voice promt of Time every hour / Głosowe odtwarzanie czasu co godzinę ---- //
 bool voiceTimePlay = false; 
@@ -170,7 +177,7 @@ bool mp3 = false;                 // Flaga określająca, czy aktualny plik audi
 bool flac = false;                // Flaga określająca, czy aktualny plik audio jest w formacie FLAC
 bool aac = false;                 // Flaga określająca, czy aktualny plik audio jest w formacie AAC
 bool vorbis = false;              // Flaga określająca, czy aktualny plik audio jest w formacie VORBIS
-bool opus = false;                // Flaga określająca, czy aktualny plik audio jest w formacie OPUS
+bool opus = false;              // Flaga określająca, czy aktualny plik audio jest w formacie OPUS
 bool id3tag = false;              // Flaga określająca, czy plik audio posiada dane ID3
 bool timeDisplay = true;          // Flaga określająca kiedy pokazać czas na wyświetlaczu, domyślnie od razu po starcie
 bool listedStations = false;      // Flaga określająca czy na ekranie jest pokazana lista stacji do wyboru
@@ -186,8 +193,8 @@ bool action3Taken = false;        // Flaga Akcji 3 - załaczenia VU
 bool ActionNeedUpdateTime = false;// Zmiena okresaljaca dla displayRadio potrzebe odczytu aktulizacji czasu
 bool debugAudioBuffor = false;    // Wyswietlanie bufora Audio
 bool audioInfoRefresh = false;    // Flaga wymuszjąca wymagane odsiwezenie ze względu na zmianę info stream
-bool noSPIFFSmemory = false;      // flaga ustawiana przy braku wykrycia SPIFFS
-bool resumePlay = false;          // Flaga wymaganego uruchomienia odtwarzania po zakonczeniu komunikatu głosowego
+bool noSPIFFScard = false;              // flaga ustawiana przy braku wykrycia karty SPIFFS
+bool resumePlay = false;            // Flaga wymaganego uruchomienia odtwarzania po zakonczeniu komunikatu głosowego
 bool fwupd = false;               // Flaga blokujaca main loop podczas aktualizacji oprogramowania
 //bool displayBufforSendRquest = false;
 bool configIrExist = false;       // Flaga informująca o istnieniu poprawnej konfiguracji pilota IR
@@ -257,7 +264,6 @@ String url2play = "";
 
 File myFile;  // Uchwyt pliku
 
-
 U8G2_SSD1322_NHD_256X64_F_4W_HW_SPI u8g2(U8G2_R2, /* cs=*/CS_OLED, /* dc=*/DC_OLED, /* reset=*/RESET_OLED);  // Hardware SPI 3.12inch OLED
 //U8G2_SH1122_256X64_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ CS_OLED, /* dc=*/ DC_OLED, /* reset=*/ RESET_OLED);		// Hardware SPI  2.08inch OLED
 //U8G2_SSPIFFS1363_256X128_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/CS_OLED, /* dc=*/DC_OLED, /* reset=*/RESET_OLED);  // Hardware SPI 3.12inch OLED
@@ -269,7 +275,7 @@ AsyncWebServer server(80);
 WiFiManager wifiManager;
 
 // Konfiguracja nowego SPI z wybranymi pinami dla czytnika kart SPIFFS
-SPIClass customSPI = SPIClass(HSPI);  // Używamy HSPI, ale z własnymi pinami
+//SPIClass customSPI = SPIClass(HSPI);  // Używamy HSPI, ale z własnymi pinami
 
 ezButton button2(SW_PIN2);  // Utworzenie obiektu przycisku z enkodera 1 ezButton, podłączonego do pinu 1
 Audio audio;                // Obiekt do obsługi funkcji związanych z dźwiękiem i audio
@@ -324,17 +330,16 @@ const char index_html[] PROGMEM = R"rawliteral(
 
 <body>
   <h2>ESP32 Web Radio</h2>
-  <p style="font-size: 1rem;">Station:%STATIONNUMBER%   Bank:%BANKVALUE%</p>
+  <p style="font-size: 1rem;">Station:%STATIONNUMBER%  Bank:%BANKVALUE%</p>
   <p style="font-size: 1.6rem;"><span id="textStationName"><b> %STATIONNAMEVALUE%</b></span></p>
   
   <p>Volume: <span id="textSliderValue">%SLIDERVALUE%</span></p>
   <p><input type="range" onchange="updateSliderVolume(this)" id="volumeSlider" min="1" max="21" value="%SLIDERVALUE%" step="1" class="slider"></p>
   <br>
-  <button class="button" onclick="location.href='/displayMode'">OLED Display Mode</button>
+  <button class="button" onClick="displayMode()">OLED Display Mode</button>
   <br>
   <p>Bank selection:</p>
-  
-     
+       
   <script>
   function updateSliderVolume(element) 
   {
@@ -376,6 +381,11 @@ const char index_html[] PROGMEM = R"rawliteral(
     xhr.send();
     document.location.reload();
     window.location.href=window.location.href();
+  }
+ 
+  function displayMode() 
+  {
+    fetch("/displayMode")
   }
   </script>
 
@@ -455,7 +465,7 @@ const char config_html[] PROGMEM = R"rawliteral(
 </table>
 <input type="submit" value="Update">
 </form>
-<p style='font-size: 0.8rem;'><a href='/'>Go Back</a></p>
+<p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>
 </body>
 </html>
 )rawliteral";
@@ -529,11 +539,44 @@ function toggleAdcDebug() {
 </script>
 
 
-<p style='font-size: 0.8rem;'><a href='/'>Go Back</a></p>
+<p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>
 </body>
 </html>
 )rawliteral";
 
+const char menu_html[] PROGMEM = R"rawliteral(
+  <!DOCTYPE HTML><html>
+  <head>
+  <link rel='icon' href='/favicon.ico' type='image/x-icon'>
+  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ESP32 Web Radio</title>
+  <style>
+    html {font-family: Arial; display: inline-block; text-align: center;}
+    h2 {font-size: 2.3rem;}
+    p {font-size: 1.1rem;}
+    a {color: black; text-decoration: none;}
+    body {max-width: 1380px; margin:0px auto; padding-bottom: 25px;}
+    .button { background-color: #4CAF50; border: 1; color: white; padding: 10px 20px; border-radius: 5px; width:200px;}
+    .button:hover {background-color: #4a4a4a;}
+    .button:active {background-color: #4a4a4a; box-shadow: 0 4px #666; transform: translateY(2px);}
+    
+  </style>
+  </head>
+  <body>
+  <h2>ESP32 Web Radio - Menu</h2>
+  <br><button class="button" onclick="location.href='/fwupdate'">OTA Update</button><br>
+  <br><button class="button" onclick="location.href='/adc'">ADC Keyboard Settings</button><br>
+  <br><button class="button" onclick="location.href='/list'">SPIFFS Explorer</button><br>
+  <br><button class="button" onclick="location.href='/editor'">Memory Bank Editor</button><br>
+  <br><button class="button" onclick="location.href='/config'">Configuration</button><br>
+  <br><p style='font-size: 0.8rem;'><a href='/'>Go Back</a></p>
+  </body></html>
+
+)rawliteral";
 
 String processor(const String& var)
 {
@@ -650,7 +693,7 @@ const uint8_t spleen6x12PL[2954] U8G2_FONT_SECTION("spleen6x12PL") =
   "\377\0";
 
 // Ikona karty SPIFFS wyswietlana przy braku karty podczas startu
-static unsigned char SPIFFScard[] PROGMEM = {
+static unsigned char spiffscard[] PROGMEM = {
   0xf0, 0xff, 0xff, 0x0f, 0xf8, 0xff, 0xff, 0x1f, 0xf8, 0xcf, 0xf3, 0x3f,
   0x38, 0x49, 0x92, 0x3c, 0x38, 0x49, 0x92, 0x3c, 0x38, 0x49, 0x92, 0x3c,
   0x38, 0x49, 0x92, 0x3c, 0x38, 0x49, 0x92, 0x3c, 0x38, 0x49, 0x92, 0x3c,
@@ -1006,7 +1049,7 @@ void fetchStationsFromServer()
   //u8g2.drawStr(21, 10, "Bank:");
   //u8g2.drawStr(51, 10, String(bank_nr).c_str());
   //u8g2.drawStr(21, 23, "Loading station from:");
-  u8g2.setCursor(21, 23);
+  u8g2.setCursor(14, 23);
   u8g2.print("Loading BANK:" + String(bank_nr) + " stations from:");
   u8g2.sendBuffer();
   
@@ -1087,8 +1130,8 @@ void fetchStationsFromServer()
   {
     Serial.println("Plik banku " + fileName + " już istnieje.");
     u8g2.setFont(spleen6x12PL);
-    //u8g2.drawStr(147, 23, "SPIFFS");
-    u8g2.print("SPIFFS");
+    //u8g2.drawStr(147, 23, "SD card");
+    u8g2.print("SPIFFS CARD");
     u8g2.sendBuffer();
     readSPIFFSStations();  // Jesli plik istnieje to odczytujemy go tylko z karty
   } 
@@ -1544,6 +1587,9 @@ void audio_eof_speech(const char *info) {
   Serial.println(info);
   if (resumePlay == true)
   {
+    delay(1000); // Opóźnienie, aby upewnić się, że kod został wysłany
+    ir_code = rcCmdOk; // Przypisujemy kod pilota - OK
+    delay(1000); // Opóźnienie, aby upewnić się, że kod został wysłany
     ir_code = rcCmdOk; // Przypisujemy kod pilota - OK
     bit_count = 32;
     calcNec();        // Przeliczamy kod pilota na pełny kod NEC
@@ -1584,15 +1630,16 @@ void bankMenuDisplay()
   u8g2.setFont(u8g2_font_fub14_tf);
   u8g2.drawStr(80, 33, "BANK ");
   u8g2.drawStr(145, 33, String(bank_nr).c_str());  // numer banku
-  if ((bankNetworkUpdate == true) || (noSPIFFSmemory == true))
+  if ((bankNetworkUpdate == true) || (noSPIFFScard == true))
   {
     u8g2.setFont(spleen6x12PL);
     u8g2.drawStr(185, 24, "NETWORK ");
     u8g2.drawStr(188, 34, "UPDATE  ");
     
-    if (noSPIFFSmemory == true)
+    if (noSPIFFScard == true)
     {
-      u8g2.drawStr(24, 24, "NO SPIFFS");
+      //u8g2.drawStr(24, 24, "NO SPIFFS");
+      u8g2.drawStr(24, 34, "NO CARD");
     }
   
   }
@@ -1823,7 +1870,7 @@ void saveVolumeOnSPIFFS()
       Serial.println("Błąd podczas tworzenia pliku volume.txt.");
      }
   }
-  if (noSPIFFSmemory == true) {EEPROM.write(2,volumeValue); EEPROM.commit();}
+  if (noSPIFFScard == true) {EEPROM.write(2,volumeValue); EEPROM.commit();}
 }
 
 void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print)
@@ -2029,7 +2076,7 @@ void saveStationOnSPIFFS() {
     }
   }
   
-  if (noSPIFFSmemory == true)
+  if (noSPIFFScard == true)
   {
     Serial.println("Brak karty SPIFFS zapisujemy do EEPROM");
     EEPROM.write(0, station_nr);
@@ -2341,7 +2388,7 @@ void updateTimer()
     }
     */
 
-    //if ((currentOption == INTERNET_RADIO) && ((mp3 == true) || (flac == true) || (aac == true) || (vorbis == true) || (opus == true)) 
+    //if ((currentOption == INTERNET_RADIO) && ((mp3 == true) || (flac == true) || (aac == true) || (vorbis == true))) 
     //if ((currentOption == INTERNET_RADIO) && (timeDisplay == true) && (audio.isRunning() == true))
     if ((timeDisplay == true) && (audio.isRunning() == true))
     {
@@ -2402,9 +2449,9 @@ void updateTimer()
         switch (timeinfo.tm_wday) {
         case 0: dayOfWeek = " Sunday  "; break;     
         case 1: dayOfWeek = " Monday  "; break;     
-        case 2: dayOfWeek = " TueSPIFFSay "; break;
-        case 3: dayOfWeek = "WedneSPIFFSay"; break;
-        case 4: dayOfWeek = "ThurSPIFFSay "; break;
+        case 2: dayOfWeek = " Tuespiffsay "; break;
+        case 3: dayOfWeek = "Wednespiffsay"; break;
+        case 4: dayOfWeek = "Thurspiffsay "; break;
         case 5: dayOfWeek = " Friday  "; break;
         case 6: dayOfWeek = "Saturday "; break;
         }
@@ -2569,8 +2616,8 @@ void readEqualizerFromSPIFFS()
 void readStationFromSPIFFS() {
   // Sprawdź, czy karta SPIFFS jest dostępna
   if (!SPIFFS.begin(true)) {
-    //Serial.println("Nie można znaleźć karty SPIFFS. Ustawiam domyślne wartości: Station=1, Bank=1.");
-    Serial.println("Nie można znaleźć SPIFFS, ustawiam wartości z EEPROMu");
+    Serial.println("Nie można znaleźć karty SPIFFS. Ustawiam domyślne wartości: Station=1, Bank=1.");
+    //Serial.println("Nie można znaleźć karty SPIFFS, ustawiam wartości z EEPROMu");
     //station_nr = 1;  // Domyślny numer stacji gdy brak karty SPIFFS
     //bank_nr = 1;     // Domyślny numer banku gdy brak karty SPIFFS
     EEPROM.get(0, station_nr);
@@ -3377,9 +3424,9 @@ void recoveryModeCheck()
 }
 void displayDimmer(bool dimmerON)
 {
-  //displayDimmerActive = dimmerON;
-  //Serial.print("displayDimmerActive: ");
-  //Serial.println(displayDimmerActive);
+  displayDimmerActive = dimmerON;
+  Serial.print("displayDimmerActive: ");
+  Serial.println(displayDimmerActive);
   //if ((dimmerON == 1) && (displayBrightness == 15)) { u8g2.sendF("ca", 0xC7, dimmerDisplayBrightness);}
   
   if ((dimmerON == 1) && (displayActive == false) && (fwupd == false)) { u8g2.setContrast(dimmerDisplayBrightness);}
@@ -4111,6 +4158,9 @@ void readPSRAMstations()  // Funkcja testowa-debug, do odczytu PSRAMu, nie uzywa
 
 void webUrlStationPlay() 
 {
+  stationString.remove(0);  // Usunięcie wszystkich znaków z obiektu stationString
+  stationNameStream.remove(0);
+  
   audio.stopSong();
 
   u8g2.clearBuffer();
@@ -4149,8 +4199,14 @@ void webUrlStationPlay()
     u8g2.drawStr(34, 55, String(url2play).c_str());
     u8g2.sendBuffer();
     
+    station_nr = 0;
+    bank_nr = 0;
+    //stationName = "Remote URL";
+    
     // Połącz z daną stacją
     audio.connecttohost(url2play.c_str());
+    
+
   } 
   else 
   {
@@ -4159,7 +4215,8 @@ void webUrlStationPlay()
   }
   station_nr = 0;
   bank_nr = 0;
-  stationName = stationNameStream;
+  //stationName = stationNameStream;
+  stationName = "WEB URL";
   url2play = "";
 }
 
@@ -4218,7 +4275,8 @@ void stationBankListHtmlMobile()
   html += "</div>" + String("\n");
 
   html += "<p style=\"font-size: 0.8rem;\">Web Radio, mobile, Evo: " + String(softwareRev) + "</p>" + String("\n");
-  html += "<p style=\"font-size: 0.8rem;\"><a href=\"list\">SPIFFS, </a><a href='/fwupdate'>OTA UPDATE, </a><a href='/config'>CONFIG</a></p>" + String("\n");
+  //html += "<p style=\"font-size: 0.8rem;\"><a href=\"list\">SPIFFS CARD, </a><a href='/fwupdate'>OTA UPDATE, </a><a href='/config'>CONFIG</a></p>" + String("\n");
+  html += "<p style='font-size: 0.8rem;'><a href='/menu'>MENU</a></p>" + String("\n");
   html += "</center></body></html>";
 
 }
@@ -4291,8 +4349,9 @@ void stationBankListHtmlPC()
   html += "</table>" + String("\n");
   html += "</div>" + String("\n");
   html += "<p style=\"font-size: 0.8rem;\">Web Radio, desktop, Evo: " + String(softwareRev) + "</p>" + String("\n");
-  html += "<p style=\"font-size: 0.8rem;\"><a href=\"list\">SPIFFS, </a><a href='/fwupdate'>OTA UPDATE, </a><a href='/config'>CONFIG</a></p>" + String("\n");
-  
+  //html += "<p style=\"font-size: 0.8rem;\"><a href=\"list\">SPIFFS CARD, </a><a href='/fwupdate'>OTA UPDATE, </a><a href='/config'>CONFIG</a></p>" + String("\n");
+  html += "<p style='font-size: 0.8rem;'><a href='/menu'>MENU</a></p>" + String("\n");
+
   html += "</center></body></html>"; 
 
 }
@@ -4400,7 +4459,7 @@ void assignRemoteCodes()
   Serial.print("IR Config - assignRemoteCodes, configIrExist: ");
   Serial.println(configIrExist);
 
-  if ((noSPIFFSmemory == false) && (configIrExist == true)) 
+  if ((noSPIFFScard == false) && (configIrExist == true)) 
   {
   Serial.println("IR config - Przypisuje wartosci z pliku Remote.txt");
   rcCmdVolumeUp = configRemoteArray[0];    // Głosnosc +
@@ -4430,7 +4489,7 @@ void assignRemoteCodes()
   rcCmdKey8 = configRemoteArray[24];       // Przycisk "8"
   rcCmdKey9 = configRemoteArray[25];       // Przycisk "9"
   }
-  else if ((noSPIFFSmemory == true) || (configIrExist == false)) // Jesli nie ma karty SPIFFS przypisujemy standardowe wartosci dla pilota Kenwood RC-406
+  else if ((noSPIFFScard == true) || (configIrExist == false)) // Jesli nie ma karty SPIFFS przypisujemy standardowe wartosci dla pilota Kenwood RC-406
   {
     Serial.println("IR Config - Przypisuje wartosci domyslne");
     rcCmdVolumeUp = 0xB914;   // Głosnosc +
@@ -4579,7 +4638,12 @@ void setup()
   audioBuffer.changeMaxBlockSize(16384);
   wifiManager.setHostname(hostname);
   
-  EEPROM.begin(128); // Inicjalizacja EEPROM
+  EEPROM.begin(128);
+
+  // Ustaw pin CS dla karty SPIFFS jako wyjście i ustaw go na wysoki stan
+  //pinMode(SPIFFS_CS, OUTPUT);
+  //digitalWrite(SPIFFS_CS, HIGH);
+
 
   // Konfiguruj piny enkodera jako wejścia
   pinMode(CLK_PIN2, INPUT_PULLUP);
@@ -4620,22 +4684,23 @@ void setup()
   u8g2.drawStr(226, 62, softwareRev);
   u8g2.sendBuffer();
 
-  // Inicjalizacja SPIFFS
-  if (!SPIFFS.begin(true))
+  // Inicjalizacja karty SPIFFS
+  //if (!SPIFFS.begin(SPIFFS_CS, customSPI)) 
+  if (!SPIFFS.begin(true))    // jesli chcemy uzwać pamieci SPIFFS zamieniamy wszystkie wpisy "SPIFFS." na "SPIFFS."
   {
     // Informacja na wyswietlaczu o problemach lub braku karty SPIFFS
-    Serial.println("Błąd inicjalizacji SPIFFS!");
+    Serial.println("Błąd inicjalizacji karty SPIFFS!");
     //u8g2.clearBuffer();
     u8g2.setFont(spleen6x12PL);
-    u8g2.drawStr(5, 62, "Error - Please check SPIFFS");
+    u8g2.drawStr(5, 62, "Error - Please check SPIFFS card");
     u8g2.setDrawColor(0);
     u8g2.drawBox(212, 0, 44, 45);
     u8g2.setDrawColor(1);
-    u8g2.drawXBMP(220, 3, 30, 40, SPIFFScard);  // ikona SPIFFS karty
+    u8g2.drawXBMP(220, 3, 30, 40, spiffscard);  // ikona SPIFFS karty
     u8g2.sendBuffer();
   //  while(true) {;;} // Zostajemy tutaj az do resetu i ponownego sprawdzenia karty
   //  return;
-    noSPIFFSmemory = true; // Flaga braku karty SPIFFS, będziemy użwyać EEPROM 
+    noSPIFFScard = true; // Flaga braku karty SPIFFS, będziemy użwyać EEPROM 
     delay(2000);
   }
   else
@@ -4721,6 +4786,9 @@ void setup()
     changeStation();                      // Ustawiamy stację
     
     // ########################################### WEB Server ######################################################
+    
+    DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+    
     server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
     {
       String userAgent = request->header("User-Agent");
@@ -4749,7 +4817,13 @@ void setup()
         request->send(SPIFFS, "/icon.png", "image/x-icon");       
     });
 
-    
+    server.on("/menu", HTTP_GET, [](AsyncWebServerRequest *request){
+      
+      String html = String(menu_html);
+
+      request->send(200, "text/html", html);
+    });
+
 
     server.on("/fwupdate", HTTP_GET, [](AsyncWebServerRequest *request){
 
@@ -4778,112 +4852,49 @@ void setup()
       u8g2.sendBuffer();
     });
 
-    server.on("/firmware", HTTP_POST, 
-  [](AsyncWebServerRequest *request) {
-    // Nie wysyłamy odpowiedzi tutaj – poczekajmy na koniec uploadu (final == true)
-  }, 
-  [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
-
-    // Wyświetlanie postępu na ekranie
-    u8g2.setCursor(5, 24);
-    u8g2.print("File: " + String(filename));
-    u8g2.setCursor(5, 36);
-    u8g2.print("Flashing... " + String(index / 1024) + " KB");
-    u8g2.sendBuffer();
-
-    // Debug przez serial
-    Serial.printf("[OTA] Writing chunk @ %u, size: %u bytes\n", index, len);
-
-    // Inicjalizacja aktualizacji
-    if (index == 0) {
-      Serial.printf("[OTA] Starting update for: %s\n", filename.c_str());
-      if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
-        Update.printError(Serial);
-        request->send(500, "text/plain", "Update init failed");
-        return;
-      }
-    }
-
-    // Zapis danych
-    if (Update.write(data, len) != len) {
-      Update.printError(Serial);
-    }
-
-    // Zakończenie aktualizacji
-    if (final) {
-      Serial.println("[OTA] Finalizing update...");
-
-      if (Update.end(true)) {
-        Serial.println("[OTA] Update complete!");
-
-        // OLED: zakończony update
-        u8g2.clearBuffer();
-        u8g2.setCursor(5, 24); u8g2.print("Firmware Updated!");
-        u8g2.setCursor(5, 36); u8g2.print("Rebooting...");
+    server.on("/firmware", HTTP_POST, [](AsyncWebServerRequest *request) {
+        request->send(200, "text/plain", "Update done");
+    }, [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final) {
+        
+        u8g2.setCursor(5, 24); u8g2.print("File: " + String(filename));
+        u8g2.setCursor(5, 36); u8g2.print("Flashing... " + String(index / 1024) + " KB");
+        
         u8g2.sendBuffer();
+        
+        //delay(100);
+        Serial.print("Firmware Update progress:");
+        Serial.print(index);
+        Serial.println(" kB\r");
 
-        // Odpowiedź HTML z ładną stroną i przekierowaniem
-        request->send(200, "text/html",
-          R"rawliteral(
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-              <meta charset="UTF-8">
-              <meta http-equiv="refresh" content="3; url=/" />
-              <title>Update Complete</title>
-              <style>
-                body {
-                  font-family: Arial, sans-serif;
-                  background-color: #f0f0f0;
-                  display: flex;
-                  justify-content: center;
-                  align-items: center;
-                  height: 100vh;
-                  margin: 0;
-                }
-                .card {
-                  background: white;
-                  padding: 2em 3em;
-                  border-radius: 12px;
-                  box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-                  text-align: center;
-                }
-                .card h2 {
-                  color: #4CAF50;
-                }
-                .card p {
-                  color: #333;
-                  margin-top: 0.5em;
-                }
-              </style>
-            </head>
-            <body>
-              <div class="card">
-                <h2>✅ Firmware Updated!</h2>
-                <p>Device will reboot and return to the main page shortly.</p>
-              </div>
-            </body>
-            </html>
-          )rawliteral"
-        );
+        //Serial.printf("Progress: %u kB\r", index);
 
-        // Restart po zakończeniu połączenia
-        request->onDisconnect([]() {
-          delay(3000);  // poczekaj na dokończenie wysyłki
-          ESP.restart();
-        });
-
-      } else {
-        Serial.println("[OTA] Update failed at final stage.");
-        Update.printError(Serial);
-        request->send(500, "text/plain", "Update failed at final stage");
-      }
-    }
-  }
-);
-
-      
-    
+        if (!index) {
+            //Serial.printf("Update: %s\n", filename.c_str());
+            if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+                Update.printError(Serial);
+            }
+        }
+        if (Update.write(data, len) != len) {
+            Update.printError(Serial);
+        }
+        if (final) {
+            if (Update.end(true)) 
+            {
+              displayStartTime = millis();
+              timeDisplay = false;
+              displayActive = true;
+              Serial.println("Update complete");
+              u8g2.setCursor(5, 48); u8g2.print("Completed - reset in 3sec");
+              u8g2.sendBuffer();
+              delay(3000);
+              ESP.restart();
+            } 
+            else 
+            {
+              Update.printError(Serial);
+            }
+        }
+    });
 
     server.on("/page2", HTTP_GET, [](AsyncWebServerRequest *request)
     {
@@ -4895,13 +4906,12 @@ void setup()
 
     server.on("/displayMode", HTTP_GET, [](AsyncWebServerRequest *request)
     {
-      displayMode++;
-      if (displayMode > 2) {displayMode = 0; }
-      //ODswiezenie ekranu OLED po zmianach konfiguracji
-      ir_code = rcCmdBack; // Udajemy kod pilota Back
+      ir_code = rcCmdSrc; // Udajemy kod pilota SRC - zmiana trybu wyswietlacza 
       bit_count = 32;
       calcNec();          // Przeliczamy kod pilota na pełny oryginalny kod NEC
-      request->redirect("/");
+      
+      //request->redirect("/");
+      request->send(200, "text/plain", "DisplayMode Changed"); // Wysyłanie aktualnej wartości
       //request->send(200, "text/html", html.c_str(), processor);
     });
 
@@ -4912,19 +4922,14 @@ void setup()
       request->redirect("/");
     });
 
-
-
-
-
-/*
-    server.on("/page3", HTTP_ANY, [](AsyncWebServerRequest *request)
+    server.on("/editor", HTTP_GET, [](AsyncWebServerRequest *request)
     {
-      request->send(SPIFFS, "/remote.txt", "application/octet-stream", true); //"application/octet-stream");
+      request->send(SPIFFS, "/editor.html", "text/html"); //"application/octet-stream");
     });
-
+/*
     server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request) 
     {
-        String html = "<html><body><h1>SPIFFS content:</h1><ul>";
+        String html = "<html><body><h1>SPIFFS card content:</h1><ul>";
         html += "<form action=\"/upload\" method=\"POST\" enctype=\"multipart/form-data\">";
         html += "<input type=\"file\" name=\"file\"><br>";
         html += "<input type=\"submit\" value=\"Upload\">";
@@ -4937,43 +4942,42 @@ void setup()
 
 */
 
-server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
-  if (!request->hasParam("filename")) {
-      request->send(400, "text/plain", "Brak parametru filename");
-      return;
-  }
+    server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!request->hasParam("filename")) {
+        request->send(400, "text/plain", "Brak parametru filename");
+        return;
+    }
 
-  String filename = request->getParam("filename")->value();
-  if (!filename.startsWith("/")) { filename = "/" + filename; }
-  File file = SPIFFS.open(filename, FILE_READ);
-  if (!file) {
-      request->send(404, "text/plain", "Nie można otworzyć pliku");
-      return;
-  }
+    String filename = request->getParam("filename")->value();
+    if (!filename.startsWith("/")) { filename = "/" + filename;}
+    File file = SPIFFS.open(filename, FILE_READ);
+    if (!file) {
+        request->send(404, "text/plain", "Nie można otworzyć pliku");
+        return;
+    }
 
-  String html = "<!DOCTYPE html><html><head>";
-  html += "<meta charset=\"UTF-8\">";
-  html += "<title>Edit File</title></head><body>";
-  html += "<h2>Editing: " + filename + "</h2>";
-  html += "<form method='POST' action='/save'>";
-  html += "<input type='hidden' name='filename' value='" + filename + "'>";
-  html += "<textarea name='content' rows='100' cols='130'>";
+    String html = "<!DOCTYPE html><html><head>";
+    html += "<meta charset=\"UTF-8\">";
+    html += "<title>Edit File</title></head><body>";
+    html += "<h2>Editing: " + filename + "</h2>";
+    html += "<form method='POST' action='/save'>";
+    html += "<input type='hidden' name='filename' value='" + filename + "'>";
+    html += "<textarea name='content' rows='100' cols='130'>";
 
-  while (file.available()) {
-      html += (char)file.read();
-  }
+    while (file.available()) {
+        html += (char)file.read();
+    }
 
-  file.close();
+    file.close();
 
-  html += "</textarea><br>";
-  html += "<input type='submit' value='Save'>";
-  html += "</form>";
-  html += "<p><a href='/list'>Back to list</a></p>";
-  html += "</body></html>";
+    html += "</textarea><br>";
+    html += "<input type='submit' value='Save'>";
+    html += "</form>";
+    html += "<p><a href='/list'>Back to list</a></p>";
+    html += "</body></html>";
 
-  request->send(200, "text/html; charset=utf-8", html); // <- ważne!
-});
-
+    request->send(200, "text/html", html);
+    });
 
 
 
@@ -5090,7 +5094,7 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
         
     String html = String(list_html) + String("\n");
     
-    html += "<body><h1>ESP32 Radio - SPIFFS:</h1>" + String("\n");
+    html += "<body><h1>ESP32 Radio - SPIFFS card:</h1>" + String("\n");
        
     html += "<form action=\"/upload\" method=\"POST\" enctype=\"multipart/form-data\">";
     html += "<input type=\"file\" name=\"file\">";
@@ -5101,7 +5105,7 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
 
     listFiles("/", html);
     html += "</table></div>";
-    html += "<p style='font-size: 0.8rem;'><a href='/'>Go Back</a></p>" + String("\n"); 
+    html += "<p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>" + String("\n"); 
     html += "</body></html>";     
     request->send(200, "text/html", html);
     });
@@ -5234,7 +5238,7 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
       keyboardButtonThreshold_9 = request->getParam("keyboardButtonThreshold_9", true)->value().toInt();
     }
 
-    request->send(200, "text/html", "<h1>ADC Keyboard Thresholds Updated!</h1><a href=\"/\">Go Back</a>");
+    request->send(200, "text/html", "<h1>ADC Keyboard Thresholds Updated!</h1><a href='/menu'>Go Back</a>");
     
     saveAdcConfig(); 
     
@@ -5290,37 +5294,8 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
       displayPowerSaveTime = request->getParam("displayPowerSaveTime", true)->value().toInt();
     }  
 
-    //request->send(200, "text/html", "<h1>Configuration Updated!</h1><a href=\"/\">Go Back</a>");
-    //saveConfig();
-    
-    request->send(200, "text/html", R"rawliteral(
-      <html>
-        <head>
-          <meta charset="UTF-8">
-          <title>Updated</title>
-          <script>
-            let seconds = 3;
-            function countdown() {
-              if (seconds > 0) {
-                document.getElementById("countdown").textContent = seconds;
-                seconds--;
-                setTimeout(countdown, 1000);
-              } else {
-                window.location.href = "/";
-              }
-            }
-            window.onload = countdown;
-          </script>
-        </head>
-        <body style="font-family: sans-serif; text-align: center; padding-top: 50px;">
-          <h1>Configuration Updated!</h1>
-          <p>Redirecting to home in <span id="countdown">3</span> seconds...</p>
-          <a href="/">Go Back Now</a>
-        </body>
-      </html>
-    )rawliteral");
-    
-    saveConfig();
+    request->send(200, "text/html", "<h1>Configuration Updated!</h1><a href='/menu'>Go Back</a>");
+    saveConfig(); 
     
     //ODswiezenie ekranu OLED po zmianach konfiguracji
     ir_code = rcCmdBack; // Udajemy komendy pilota
@@ -5352,11 +5327,12 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
     });
 
     server.on("/view", HTTP_GET, [](AsyncWebServerRequest *request) 
-{
-    String filename = "/";
-    if (request->hasParam("filename")) 
     {
+      String filename = "/";
+      if (request->hasParam("filename")) 
+      {
         filename += request->getParam("filename")->value();
+        //String fullPath = "/" + filename;
 
         File file = SPIFFS.open(filename);
         if (file) 
@@ -5367,20 +5343,81 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
                 content += (char)file.read();
             }
             content += "</pre><a href=\"/list\">Back to list</a></body></html>";
-            request->send(200, "text/html; charset=utf-8", content); // <- ważne!
+            request->send(200, "text/html", content);
             file.close();
+          } 
+          else 
+          {
+            request->send(404, "text/plain", "File not found");
+          }
         } 
         else 
         {
-            request->send(404, "text/plain", "File not found");
-        }
-    } 
-    else 
-    {
         request->send(400, "text/plain", "No file name");
-    }
-});
+      }
+    });
+    // Format viewweb na potrzeby zewnetrznego Edytora Bankow HTML
+    server.on("/viewweb", HTTP_GET, [](AsyncWebServerRequest *request)  
+    {
+      String filename = "/";
+      if (request->hasParam("filename")) 
+      {
+        filename += request->getParam("filename")->value();
+        //String fullPath = "/" + filename;
 
+        File file = SPIFFS.open(filename);
+        if (file) 
+        {
+            String content; //= "<html><body>";
+            while (file.available()) {
+                content += (char)file.read();
+            }
+            //content +="</body></html>";
+            request->send(200, "text/html", content);
+            file.close();
+          } 
+          else 
+          {
+            request->send(404, "text/plain", "File not found");
+          }
+        } 
+        else 
+        {
+        request->send(400, "text/plain", "No file name");
+      }
+    });
+    
+    server.on("/viewweb2", HTTP_GET, [](AsyncWebServerRequest *request)  
+    {
+      String filename = "/";
+      if (request->hasParam("filename")) 
+      {
+        filename += request->getParam("filename")->value();
+        //String fullPath = "/" + filename;
+
+        File file = SPIFFS.open(filename);
+        if (file) 
+        {
+            String content; //= "<html><body>";
+            while (file.available()) {
+                //line = file.readStringUntil('\n');
+                content += file.readStringUntil('\n') + String("\n");
+            }
+            //content +="</body></html>";
+            request->send(200, "text/html", content);
+            file.close();
+          } 
+          else 
+          {
+            request->send(404, "text/plain", "File not found");
+          }
+        } 
+        else 
+        {
+        request->send(400, "text/plain", "No file name");
+      }
+    });
+  
 
     server.on("/download", HTTP_ANY, [](AsyncWebServerRequest *request) {
     if (request->hasParam("filename")) {
@@ -5500,6 +5537,7 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
       String inputMessage2;
       String inputMessage3;
       String inputMessage4;
+      String inputMessage5;
       // GET input1 value on <ESP_IP>/slider?value=<inputMessage>
       if (request->hasParam(PARAM_INPUT_1)) // Parametr zmiana głośności
       {
@@ -5554,7 +5592,7 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
         inputMessage4 = request->getParam(PARAM_INPUT_4)->value();
         url2play = inputMessage4.c_str();
         urlToPlay = true;
-      }              
+      }
       else 
       {
         inputMessage1 = "No message sent";
@@ -5584,6 +5622,9 @@ server.on("/edit", HTTP_GET, [](AsyncWebServerRequest *request) {
     updateTimer();
     //readRemoteConfig();
     //assignRemoteCodes();
+    if (MDNS.begin(hostname)) { Serial.println("mDNS rozpoczęte. HOSTNAME.local' w przeglądarce"); }
+
+
   } 
   else 
   {
@@ -5713,7 +5754,7 @@ void loop()
 
       fwupd = false;        // Kasujemy flagę aktulizacji OTA gdyby była ustawiona
       //displayActive = true; // jesli odbierzemy kod z pilota to uatywnij wyswietlacz i wyłacz przyciemnienie OLEDa
-      displayDimmer(0); // jesli odbierzemy kod z pilota to wyłaczamy przyciemnienie wyswietlacza OLED
+      //displayDimmer(0); // jesli odbierzemy kod z pilota to wyłaczamy przyciemnienie wyswietlacza OLED
       displayPowerSave(0);
       
       if (ir_code == rcCmdVolumeUp)  { volumeUp(); }         // Przycisk głośniej
@@ -5875,7 +5916,7 @@ void loop()
         }
         displayRadio();
       }
-      else if (ir_code == rcCmdDirect) // Przycisk Direct -> Menu Bank - udpate GitHub, Menu Equalizer - reset wartosci, Radio Display - funkcja przyciemniania ekranu
+      else if (ir_code == rcCmdDirect) // Przycisk Direct -> Menu Bank - udpate GitHub, Menu Equalizer - reset wartosci, Radio Display - fnkcja przyciemniania ekranu
       {
         if ((bankMenuEnable == true) && (equalizerMenuEnable == false))// flage można zmienic tylko bedąc w menu wyboru banku
         { 
@@ -5892,20 +5933,8 @@ void loop()
         if ((bankMenuEnable == false) && (equalizerMenuEnable == false) && (volumeSet == false))
         { 
           
-          displayDimmerActive = !displayDimmerActive;         // zmień stan
-          displayDimmer(displayDimmerActive);                 // ustaw OLED
-
-          Serial.print("displayDimmerActive: ");
-          Serial.println(displayDimmerActive);
-
-          if (displayDimmerActive) {
-              Serial.println("Włączono przyciemnienie OLED");
-          } else {
-              Serial.println("Wyłączono przyciemnienie OLED (rozjaśniono)");
-          }
-          
-          //displayDimmer(!displayDimmerActive); // Dimmer OLED
-          //Serial.println("Właczono display Dimmer rcCmdDirect");
+          displayDimmer(!displayDimmerActive); // Dimmer OLED
+          Serial.println("Właczono display Dimmer rcCmdDirect");
           /*
           if (displayDimmerActive == 1) 
           {       
@@ -6094,3 +6123,4 @@ void loop()
   //runTime2 = esp_timer_get_time();
   //runTime = runTime2 - runTime1;  
 }
+
