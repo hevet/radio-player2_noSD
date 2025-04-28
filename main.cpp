@@ -26,12 +26,6 @@
 #define softwareRev "v3.17.65"  // Wersja oprogramowania radia
 #define hostname "esp32radio"  // Definicja nazwy hosta widoczna na zewnątrz
 
-// Definicja pinow czytnika karty SPIFFS
-//#define SPIFFS_CS 47    // Pin CS (Chip Select) dla karty SPIFFS wybierany jako interfejs SPI
-//#define SPIFFS_SCLK 45  // Pin SCK (Serial Clock) dla karty SPIFFS
-//#define SPIFFS_MISO 21  // Pin MISO (Master In Slave Out) dla karty SPIFFS
-//#define SPIFFS_MOSI 48  // pin MOSI (Master Out Slave In) dla karty SPIFFS
-
 // Definicja pinow dla wyswietlacza OLED 
 #define SPI_MOSI_OLED 39  // Pin MOSI (Master Out Slave In) dla interfejsu SPI OLED
 #define SPI_MISO_OLED 0   // Pin MISO (Master In Slave Out) brak dla wyswietlacza OLED
@@ -54,8 +48,13 @@
 #define DT_PIN2 11              // Podłączenie z pinu 11 do DT na enkoderze lewym
 #define SW_PIN2 9               // Podłączenie z pinu 1 do SW na enkoderze lewym (przycisk)
 
+#include <Encoder.h>            // Biblioteka do obsługi enkodera
+Encoder myEnc(CLK_PIN2, DT_PIN2);
+long lastPos = 0;
+int8_t recoveryMode = 0; // Zmienna do przechowywania pozycji enkodera
+
 // IR odbiornik podczerwieni 
-#define recv_pin 15
+#define recv_pin 6
 
 // definicja dlugosci ilosci stacji w banku, dlugosci nazwy stacji w PSRAM/EEPROM, maksymalnej ilosci plikow audio (odtwarzacz)
 #define MAX_STATIONS 99          // Maksymalna liczba stacji radiowych, które mogą być przechowywane w jednym banku
@@ -1049,7 +1048,7 @@ void fetchStationsFromServer()
   //u8g2.drawStr(21, 10, "Bank:");
   //u8g2.drawStr(51, 10, String(bank_nr).c_str());
   //u8g2.drawStr(21, 23, "Loading station from:");
-  u8g2.setCursor(14, 23);
+  u8g2.setCursor(10, 23);
   u8g2.print("Loading BANK:" + String(bank_nr) + " stations from:");
   u8g2.sendBuffer();
   
@@ -2449,9 +2448,9 @@ void updateTimer()
         switch (timeinfo.tm_wday) {
         case 0: dayOfWeek = " Sunday  "; break;     
         case 1: dayOfWeek = " Monday  "; break;     
-        case 2: dayOfWeek = " Tuespiffsay "; break;
-        case 3: dayOfWeek = "Wednespiffsay"; break;
-        case 4: dayOfWeek = "Thurspiffsay "; break;
+        case 2: dayOfWeek = " Tuesday "; break;
+        case 3: dayOfWeek = "Wednesday"; break;
+        case 4: dayOfWeek = "Thursday "; break;
         case 5: dayOfWeek = " Friday  "; break;
         case 6: dayOfWeek = "Saturday "; break;
         }
@@ -3321,106 +3320,118 @@ void handlePreOtaUpdateCallback()
   });
 }
 
-void recoveryModeCheck()
-{
-  if (digitalRead(SW_PIN2) == 0)
-  {
-    int8_t recoveryMode = 0;
-    int16_t recoveryModeCounter = 0;
+void displayRecoveryOption(int mode) {
+  const char* lines[3][3] = {
+    {">> RESET BANK=1, STATION=1 <<", "   RESET WIFI SSID, PASSWD   ", "   WEB UPDATE PORTAL         "},
+    {"   RESET BANK=1, STATION=1   ", ">> RESET WIFI SSID, PASSWD <<", "   WEB UPDATE PORTAL         "},
+    {"   RESET BANK=1, STATION=1   ", "   RESET WIFI SSID, PASSWD   ", ">> WEB UPDATE PORTAL       <<"}
+  };
+
+  u8g2.clearBuffer();
+  u8g2.setFont(spleen6x12PL);
+  u8g2.drawStr(1, 14, "[ -- Rotate Enckoder -- ]");
+  u8g2.drawStr(1, 28, lines[mode][0]);
+  u8g2.drawStr(1, 42, lines[mode][1]);
+  u8g2.drawStr(1, 56, lines[mode][2]);
+  u8g2.sendBuffer();
+}
+
+void recoveryModeCheck() {
+  if (digitalRead(SW_PIN2) == LOW) {
+    // Reset pozycji
+    myEnc.write(0);
+    recoveryMode = 0;
+    //lastPos = 0;
+
+    // Start ekran
     u8g2.clearBuffer();
     u8g2.setFont(spleen6x12PL);
     u8g2.drawStr(1,14, "RECOVERY / RESET MODE - release encoder");
     u8g2.sendBuffer();
     delay(2000);
-    while (digitalRead(SW_PIN2) == 0) {;}  
-    u8g2.drawStr(1,14, "Please Wait...                         ");
+    while (digitalRead(SW_PIN2) == LOW) {;}
+
+    u8g2.clearBuffer();
+    u8g2.setFont(spleen6x12PL);
+    u8g2.drawStr(1,14, "Please Wait...");
     u8g2.sendBuffer();
     delay(1000);
+
+    displayRecoveryOption(recoveryMode);
+
+    // Timeout setup
+    unsigned long timeoutStart = millis();
+    const unsigned long TIMEOUT_MS = 30000;
+
+    while (millis() - timeoutStart < TIMEOUT_MS) {
+    long newPos = myEnc.read() / 4;
+
+    if (newPos > lastPos) {
+      recoveryMode = (recoveryMode + 2) % 3; // teraz kręcenie w prawo = w górę
+      displayRecoveryOption(recoveryMode);
+      timeoutStart = millis();
+    }
+    else if (newPos < lastPos) {
+      recoveryMode = (recoveryMode + 1) % 3; // kręcenie w lewo = w dół
+      displayRecoveryOption(recoveryMode);
+      timeoutStart = millis();
+    }
+
+    lastPos = newPos;
+
+      if (digitalRead(SW_PIN2) == LOW) {
+        timeoutStart = millis();  // reset timer
+
+        u8g2.clearBuffer();
+        u8g2.setFont(spleen6x12PL);
+
+        switch (recoveryMode) {
+          case 0:
+            bank_nr = 1;
+            station_nr = 1;
+            saveStationOnSPIFFS();
+            u8g2.drawStr(1,14, "SET BANK=1, STATION=1");
+            u8g2.drawStr(1,28, "ESP will RESET in 3sec.");
+            u8g2.sendBuffer();
+            delay(3000);
+            ESP.restart();
+            break;
+
+          case 1:
+            wifiManager.resetSettings();
+            u8g2.drawStr(1,14, "WIFI CLEARED");
+            u8g2.drawStr(1,28, "ESP will RESET in 3sec.");
+            u8g2.sendBuffer();
+            delay(3000);
+            ESP.restart();
+            break;
+
+          case 2:
+            u8g2.drawStr(1,14, "WEB PORTAL STARTED");
+            u8g2.drawStr(1,28, "Connect to WiFi ESP-Radio");
+            u8g2.drawStr(1,42, "Open http://192.168.4.1");
+            u8g2.sendBuffer();
+            delay(3000);
+
+            wifiManager.startConfigPortal("ESP32-Radio");
+
+            while (true) {
+              wifiManager.process();
+              wifiManager.setPreOtaUpdateCallback(handlePreOtaUpdateCallback);
+            }
+            break;
+        }
+      }
+    }
+
+    // Timeout – exit recovery mode
     u8g2.clearBuffer();
-     
-    while (true)
-    {
-      u8g2.drawStr(1,14, "[ -- Rotate Enckoder -- ]            ");
-      CLK_state2 = digitalRead(CLK_PIN2);
-      if (CLK_state2 != prev_CLK_state2 && CLK_state2 == HIGH)  // Sprawdzenie, czy stan CLK zmienił się na wysoki
-      {
-        if (digitalRead(DT_PIN2) == HIGH) 
-        {
-          recoveryMode++;
-          if (recoveryMode > 2) {recoveryMode =2;}
-        }
-        else
-        {
-          recoveryMode--;
-          if (recoveryMode < 0) {recoveryMode =0;}
-        }
-      }
-      
-      
-      if (recoveryMode == 0)
-      {
-        u8g2.drawStr(1,28, ">> RESET BANK=1, STATION=1 <<");
-        u8g2.drawStr(1,42, "   RESET WIFI SSID, PASSWD   ");  
-        u8g2.drawStr(1,56, "   WEB UPDATE PORTAL         ");  
-      }
-      else if (recoveryMode == 1)
-      {
-        u8g2.drawStr(1,28, "   RESET BANK=1, STATION=1   ");
-        u8g2.drawStr(1,42, ">> RESET WIFI SSID, PASSWD <<");      
-        u8g2.drawStr(1,56, "   WEB UPDATE PORTAL         ");
-      }
-      
-      else if (recoveryMode == 2)
-      {
-        u8g2.drawStr(1,28, "   RESET BANK=1, STATION=1   ");
-        u8g2.drawStr(1,42, "   RESET WIFI SSID, PASSWD   ");      
-        u8g2.drawStr(1,56, ">> WEB UPDATE PORTAL       <<");
-      }    
-      u8g2.sendBuffer();
-      
-      if (digitalRead(SW_PIN2) == 0)
-      {
-        if (recoveryMode == 0)
-        {
-          bank_nr = 1;
-          station_nr = 1;
-          saveStationOnSPIFFS();
-          u8g2.clearBuffer(); 
-          u8g2.drawStr(1,14, "SET BANK=1, STATION=1         ");
-          u8g2.drawStr(1,28, "ESP will RESET in 3sec.       ");
-          u8g2.sendBuffer();
-          delay(3000);
-          ESP.restart();
-        }  
-        else if (recoveryMode == 1)
-        {
-          u8g2.clearBuffer();
-          u8g2.drawStr(1,14, "WIFI SSID, PASSWD CLEARED   ");
-          u8g2.drawStr(1,28, "ESP will RESET in 3sec.     ");
-          u8g2.sendBuffer();
-          wifiManager.resetSettings();
-          delay(3000);
-          ESP.restart();
-        }
-        else if (recoveryMode == 2)
-        {
-          u8g2.clearBuffer();
-          u8g2.drawStr(1,14, "WEB  PORTAL STARTED         ");
-          u8g2.drawStr(1,28, "Connect to WiFi ESP-Radio   ");
-          u8g2.drawStr(1,42, "Open http://192.168.4.1     ");
-          u8g2.sendBuffer();
-          //wifiManager.startWebPortal();
-          wifiManager.startConfigPortal("ESP32-Radio");
-          delay(3000);
-          while(true) { wifiManager.process(); wifiManager.setPreOtaUpdateCallback(handlePreOtaUpdateCallback);} 
-        }
-
-
-
-      }
-      prev_CLK_state2 = CLK_state2;
-    }   
-  } 
+    u8g2.setFont(spleen6x12PL);
+    u8g2.drawStr(1, 28, "Exiting recovery mode...");
+    u8g2.sendBuffer();
+    delay(2000);
+    return;
+  }
 }
 void displayDimmer(bool dimmerON)
 {
