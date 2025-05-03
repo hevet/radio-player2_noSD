@@ -126,7 +126,7 @@ uint8_t volumeBufferValue = 0;  // Wartość głośności, domyślnie ustawiona 
 int maxVisibleLines = 4;               // Maksymalna liczba widocznych linii na ekranie OLED
 int bitrateStringInt = 0;              // Deklaracja zmiennej do konwersji Bitrate string na wartosc Int aby podzelic bitrate przez 1000
 int buttonLongPressTime2 = 2000;       // Czas reakcji na długie nacisniecie enkoder 2
-int buttonShortPressTime2 = 500;       // Czas rekacjinna krótkie nacisniecie enkodera 2
+int buttonShortPressTime2 = 500;       // Czas rekacji na krótkie nacisniecie enkodera 2
 int buttonSuperLongPressTime2 = 4000;  // Czas reakcji na super długie nacisniecie enkoder 2
 uint8_t stationNameLenghtCut = 24;     // 24-> 25 znakow, 25-> 26 znaków, zmienna określająca jak długa nazwę ma nazwa stacji w plikach Bankow liczone od 0- wartosci ustalonej
 
@@ -139,7 +139,7 @@ bool timeVoiceInfoEveryHour = true;
 // ---- Auto dimmer / auto przyciemnianie wyswietlacza ---- //
 uint8_t displayDimmerTimeCounter = 0;  // Zmienna inkrementowana w przerwaniu timera2 do przycimniania wyswietlacz
 uint8_t dimmerDisplayBrightness = 10;   // Wartość przyciemnienia wyswietlacza po czasie niekatywnosci
-uint8_t displayBrightness = 250;        // Domyślna maksymalna janość wyswietlacza
+uint8_t displayBrightness = 250;        // Domyślna maksymalna jasność wyswietlacza
 uint16_t displayAutoDimmerTime = 10;   // Czas po jakim nastąpi przyciemninie wyswietlacza, liczony w sekundach
 bool displayAutoDimmerOn = false;       // Automatyczne przyciemnianie wyswietlacza, domyślnie włączone
 bool displayDimmerActive = false;       // Aktywny tryb przyciemnienia
@@ -176,7 +176,7 @@ bool mp3 = false;                 // Flaga określająca, czy aktualny plik audi
 bool flac = false;                // Flaga określająca, czy aktualny plik audio jest w formacie FLAC
 bool aac = false;                 // Flaga określająca, czy aktualny plik audio jest w formacie AAC
 bool vorbis = false;              // Flaga określająca, czy aktualny plik audio jest w formacie VORBIS
-bool opus = false;              // Flaga określająca, czy aktualny plik audio jest w formacie OPUS
+bool opus = false;                // Flaga określająca, czy aktualny plik audio jest w formacie OPUS
 bool id3tag = false;              // Flaga określająca, czy plik audio posiada dane ID3
 bool timeDisplay = true;          // Flaga określająca kiedy pokazać czas na wyświetlaczu, domyślnie od razu po starcie
 bool listedStations = false;      // Flaga określająca czy na ekranie jest pokazana lista stacji do wyboru
@@ -191,7 +191,7 @@ bool vuMeterMode = false;         // tryb rysowania vuMeter
 bool action3Taken = false;        // Flaga Akcji 3 - załaczenia VU
 bool ActionNeedUpdateTime = false;// Zmiena okresaljaca dla displayRadio potrzebe odczytu aktulizacji czasu
 bool debugAudioBuffor = false;    // Wyswietlanie bufora Audio
-bool audioInfoRefresh = false;    // Flaga wymuszjąca wymagane odsiwezenie ze względu na zmianę info stream
+bool audioInfoRefresh = false;    // Flaga wymuszjąca wymagane odswiezenie ze względu na zmianę info stream
 bool noSPIFFScard = false;              // flaga ustawiana przy braku wykrycia karty SPIFFS
 bool resumePlay = false;            // Flaga wymaganego uruchomienia odtwarzania po zakonczeniu komunikatu głosowego
 bool fwupd = false;               // Flaga blokujaca main loop podczas aktualizacji oprogramowania
@@ -596,8 +596,8 @@ const long gmtOffset_sec = 3600;          // Przesunięcie czasu UTC w sekundach
 const int daylightOffset_sec = 3600;      // Przesunięcie czasu letniego w sekundach, dla Polski to 1 godzina
 
 
-const uint8_t spleen6x12PL[2954] U8G2_FONT_SECTION("spleen6x12PL") =
-  "\340\1\3\2\3\4\1\3\4\6\14\0\375\10\376\11\377\1\225\3]\13f \7\346\361\363\237\0!\12"
+const uint8_t spleen6x12PL[2948] U8G2_FONT_SECTION("spleen6x12PL") = 
+  "\340\1\3\2\3\4\1\3\4\6\14\0\375\10\376\11\377\1\225\3]\13g \7\346\361\363\237\0!\12"
   "\346\361#i\357`\316\0\42\14\346\361\3I\226dI\316/\0#\21\346\361\303I\64HI\226dI"
   "\64HIN\6$\22\346q\205CRK\302\61\311\222,I\206\60\247\0%\15\346\361cQK\32\246"
   "I\324\316\2&\17\346\361#Z\324f\213\22-Zr\42\0'\11\346\361#i\235\237\0(\13\346\361"
@@ -635,61 +635,61 @@ const uint8_t spleen6x12PL[2954] U8G2_FONT_SECTION("spleen6x12PL") =
   "\262hH[\0r\14\346\361S\207$K\322v&\0s\15\346\361S\207$\236\323d\310\311\0t\13"
   "\346\361\3i\70\246\315:\31u\20\346\361\23\263$K\262$K\262h\310\251\0v\16\346\361\23\263$"
   "K\262$\213\222\60gw\17\346\361\23\263$KZ\6\305\222\345T\0x\16\346\361\23\263$\213\266)"
-  "K\262\234\12y\22\346\361\23\263$K\262$K\262hH\223!G\0z\14\346\361\23\7\65l\34t"
-  "*\0{\14\346\361iiM\224\323\262\16\3|\10\346q\245\375;\5}\14\346\361\310iY\324\322\232"
-  "N\1~\12\346\361s\213\222D\347\10\177\7\346\361\363\237\0\200\6\341\311\243\0\201\6\341\311\243\0\202"
-  "\6\341\311\243\0\203\6\341\311\243\0\204\6\341\311\243\0\205\6\341\311\243\0\206\6\341\311\243\0\207\6\341"
-  "\311\243\0\210\6\341\311\243\0\211\6\341\311\243\0\212\6\341\311\243\0\213\6\341\311\243\0\214\16\346\361e"
-  "C\222\306sZ\31r\62\0\215\6\341\311\243\0\216\6\341\311\243\0\217\14\346qe\203T\354\232\16:"
+  "K\262\234\12y\21\346\361\23\263$K\262$K\262hH+C\4z\14\346\361\23\7\65l\34t*"
+  "\0{\14\346\361iiM\224\323\262\16\3|\10\346q\245\375;\5}\14\346\361\310iY\324\322\232N"
+  "\1~\12\346\361s\213\222D\347\10\177\7\346\361\363\237\0\200\6\341\311\243\0\201\6\341\311\243\0\202\6"
+  "\341\311\243\0\203\6\341\311\243\0\204\6\341\311\243\0\205\6\341\311\243\0\206\6\341\311\243\0\207\6\341\311"
+  "\243\0\210\6\341\311\243\0\211\6\341\311\243\0\212\6\341\311\243\0\213\6\341\311\243\0\214\16\346\361eC"
+  "R\213\347\264\62\344d\0\215\7\346\361\363\237\0\216\6\341\311\243\0\217\14\346qe\203T\354\232\16:"
   "\25\220\6\341\311\243\0\221\6\341\311\243\0\222\6\341\311\243\0\223\6\341\311\243\0\224\6\341\311\243\0\225"
-  "\6\341\311\243\0\226\6\341\311\243\0\227\16\346\361eC\222\306sZ\31r\62\0\230\6\341\311\243\0\231"
-  "\6\341\311\243\0\232\6\341\311\243\0\233\6\341\311\243\0\234\16\346\361\205\71\66$\361\234&CN\6\235"
-  "\6\341\311\243\0\236\6\341\311\243\0\237\15\346\361\205\71\64\250a\343\240S\1\240\7\346\361\363\237\0\241"
-  "\23\346\361\3S\226dI\226\14J\226dI\26\306\71\0\242\21\346\361\23\302!\251%Y\222%\341\220"
-  "\345\24\0\243\14\346q\247-\231\230\306CN\5\244\22\346\361\3S\226dI\226\14J\226dI\26\346"
-  "\4\245\22\346\361\3S\226dI\226\14J\226dI\26\346\4\246\16\346\361eC\222\306sZ\31r\62"
-  "\0\247\17\346\361#Z\224\245Z\324\233\232E\231\4\250\11\346\361\3I\316\237\1\251\21\346\361\3C\22"
-  "J\211\22)\221bL\206\234\12\252\15\346\361#r\66\325vd\310\31\1\253\17\346\361\223\243$J\242"
-  "\266(\213r\42\0\254\14\346qe\203T\354\232\16:\25\255\10\346\361s\333y\3\256\21\346\361\3C"
-  "\22*\226d\261$c\62\344T\0\257\14\346qe\203\32vM\7\235\12\260\12\346\361#Z\324\246\363"
-  "\11\261\20\346\361S\347hH\262$\213\206\64\314\21\0\262\14\346\361#Z\224\206\305!\347\6\263\13\346"
-  "\361\3i\252\251\315:\31\264\11\346\361Ca\235\337\0\265\14\346\361\23\243\376i\251\346 \0\266\16\346"
-  "\361\205\71\66$\361\234&CN\6\267\10\346\361s\314y\4\270\11\346\361\363\207\64\14\1\271\20\346\361"
-  "S\347hH\262$\213\206\64\314\21\0\272\15\346\361#Z\324\233\16\15\71#\0\273\17\346\361\23\243,"
-  "\312\242\226(\211r\62\0\274\15\346\361\205\71\64\250a\343\240S\1\275\17\346\361\204j-\211\302\26\245"
-  "\24\26\207\0\276\21\346\361hQ\30'\222\64\206ZR\33\302\64\1\277\15\346\361#\71\64\250a\343\240"
-  "S\1\300\21\346\361\304\341\224%Y\62(Y\222%YN\5\301\21\346\361\205\341\224%Y\62(Y\222"
-  "%YN\5\302\22\346q\205I\66eI\226\14J\226dI\226S\1\303\23\346\361DI\242MY\222"
-  "%\203\222%Y\222\345T\0\304\20\346\361S\347hH\262$\213\206\64\314\21\0\305\16\346\361eC\222"
-  "\306sZ\31r\62\0\306\14\346\361eC\222\366<\344T\0\307\15\346\361\3C\222\366<di\30\2"
-  "\310\17\346\361\304\341\220\244\351\20\245\361\220S\1\311\17\346\361\205\341\220\244\351\20\245\361\220S\1\312\20"
-  "\346\361\3C\222\246C\224\226\207\64\314\21\0\313\17\346\361\324\241!I\323!J\343!\247\2\314\13\346"
-  "\361\304\341\230v\334\311\0\315\13\346\361\205\341\230v\334\311\0\316\14\346q\205I\66\246\35w\62\0\317"
-  "\13\346\361\324\241\61\355\270\223\1\320\15\346\361\3[\324\262D}\332\311\0\321\20\346\361EIV\221\22"
-  ")\351'%\322\251\0\322\20\346\361\304\341\224%Y\222%Y\222E;\31\323\20\346\361\205\341\224%Y"
-  "\222%Y\222E;\31\324\21\346q\205I\66eI\226dI\226d\321N\6\325\22\346\361DI\242M"
-  "Y\222%Y\222%Y\264\223\1\326\21\346\361\324\241)K\262$K\262$\213v\62\0\327\14\346\361S"
-  "\243L\324\242\234\33\0\330\20\346qFS\226DJ_\244$\213\246\234\6\331\21\346\361\304Y%K\262"
-  "$K\262$\213\206\234\12\332\21\346\361\205Y%K\262$K\262$\213\206\234\12\333\23\346q\205I\224"
-  "%Y\222%Y\222%Y\64\344T\0\334\22\346\361\324\221,\311\222,\311\222,\311\242!\247\2\335\17"
-  "\346\361\205Y%K\262hH+CN\6\336\21\346\361\243\351\20eI\226dI\226\14QN\3\337\17"
-  "\346\361\3Z\324%\213j\211\224$:\31\340\20\346q\305\71\64GC\222%Y\64\344T\0\341\20\346"
-  "\361\205\71\66GC\222%Y\64\344T\0\342\11\346\361Ca\235\337\0\343\21\346\361DI\242Cs\64"
-  "$Y\222ECN\5\344\20\346\361\3I\16\315\321\220dI\26\15\71\25\345\20\346q\205I\30\316\321"
-  "\220dI\26\15\71\25\346\15\346\361Ca\70$i\363\220S\1\347\15\346\361S\207$m\36\262\64\14"
-  "\1\350\20\346q\305\71\64$Y\222%\203\22\17\71\25\351\20\346\361\205\71\66$Y\222%\203\22\17\71"
-  "\25\352\20\346\361S\207$K\262dP\342!\254C\0\353\21\346\361\3I\16\15I\226d\311\240\304C"
-  "N\5\354\13\346q\305\71\244v\325\311\0\355\13\346\361\205\71\246v\325\311\0\356\14\346q\205I\16\251"
-  "]u\62\0\357\14\346\361\3I\16\251]u\62\0\360\21\346q$a%\234\262$K\262$\213v\62"
-  "\0\361\21\346\361\205\71\64DY\222%Y\222%YN\5\362\20\346q\305\71\64eI\226dI\26\355"
-  "d\0\363\20\346\361\205\71\66eI\226dI\26\355d\0\364\20\346q\205I\16MY\222%Y\222E"
-  ";\31\365\21\346\361c\222\222HI\226dI\66\15\221N\4\366\20\346\361\3I\16MY\222%Y\222"
-  "E;\31\367\13\346\361\223sh\320\241\234\31\370\17\346\361\223\242)RZ\244$\213\246\234\6\371\21\346"
-  "q\305\71\222%Y\222%Y\222ECN\5\372\21\346\361\205\71\224%Y\222%Y\222ECN\5\373"
-  "\22\346q\205I\216dI\226dI\226d\321\220S\1\374\22\346\361\3I\216dI\226dI\226d\321"
-  "\220S\1\375\23\346\361\205\71\224%Y\222%Y\222ECZ\31\42\0\376\22\346q\247\351\20eI\226"
-  "dI\226\14Q\232\203\0\377\23\346\361\3I\216dI\226dI\226d\321\220V\206\10\0\0\0\4\377"
-  "\377\0";
+  "\6\341\311\243\0\226\6\341\311\243\0\227\7\346\361\363\237\0\230\6\341\311\243\0\231\6\341\311\243\0\232\6"
+  "\341\311\243\0\233\6\341\311\243\0\234\16\346\361\205\71\66$\361\234&CN\6\235\7\346\361\363\237\0\236"
+  "\6\341\311\243\0\237\15\346\361\205\71\64\250a\343\240S\1\240\7\346\361\363\237\0\241\23\346\361\3S\226"
+  "dI\226\14J\226dI\26\306\71\0\242\21\346\361\23\302!\251%Y\222%\341\220\345\24\0\243\14\346"
+  "q\247-\231\230\306CN\5\244\15\346\361S\243L\213\332\264(\247\2\245\23\346\361\3S\226dI\226"
+  "\14J\226dI\26\306\71\0\246\16\346\361eCR\213\347\264\62\344d\0\247\17\346\361#Z\224\245Z"
+  "\324\233\232E\231\4\250\11\346\361\3I\316\237\1\251\21\346\361\3C\22J\211\22)\221bL\206\234\12"
+  "\252\15\346\361#r\66\325vd\310\31\1\253\17\346\361\223\243$J\242\266(\213r\42\0\254\14\346q"
+  "e\203T\354\232\16:\25\255\10\346\361s\333y\3\256\21\346\361\3C\22*\226d\261$c\62\344T"
+  "\0\257\14\346qe\203\32vM\7\235\12\260\12\346\361#Z\324\246\363\11\261\20\346\361S\347hH\262"
+  "$\213\206\64\314\21\0\262\14\346\361#Z\224\206\305!\347\6\263\13\346\361\3i\252\251\315:\31\264\11"
+  "\346\361Ca\235\337\0\265\14\346\361\23\243\376i\251\346 \0\266\16\346\361\205\71\66$\361\234&CN"
+  "\6\267\10\346\361s\314y\4\270\11\346\361\363\207\64\14\1\271\16\346\361S\347hH\262$\213\206\60'"
+  "\272\15\346\361#Z\324\233\16\15\71#\0\273\17\346\361\23\243,\312\242\226(\211r\62\0\274\15\346\361"
+  "\205\71\64\250a\343\240S\1\275\17\346\361\204j-\211\302\26\245\24\26\207\0\276\21\346\361hQ\30'"
+  "\222\64\206ZR\33\302\64\1\277\15\346\361#\71\64\250a\343\240S\1\300\21\346\361\304\341\224%Y\62"
+  "(Y\222%YN\5\301\21\346\361\205\341\224%Y\62(Y\222%YN\5\302\22\346q\205I\66e"
+  "I\226\14J\226dI\226S\1\303\23\346\361DI\242MY\222%\203\222%Y\222\345T\0\304\21\346"
+  "\361\324\241)K\262dP\262$K\262\234\12\305\22\346q\205I\66eI\226\14J\226dI\226S\1"
+  "\306\14\346\361eCRK;\17\71\25\307\15\346\361\3C\222\366<di\30\2\310\17\346\361\304\341\220"
+  "\244\351\20\245\361\220S\1\311\17\346\361\205\341\220\244\351\20\245\361\220S\1\312\20\346\361\3C\222\246C"
+  "\224\226\207\64\314\21\0\313\17\346\361\324\241!I\323!J\343!\247\2\314\13\346\361\304\341\230v\334\311"
+  "\0\315\13\346\361\205\341\230v\334\311\0\316\14\346q\205I\66\246\35w\62\0\317\13\346\361\324\241\61\355"
+  "\270\223\1\320\15\346\361\3[\324\262D}\332\311\0\321\20\346\361EIV\221\22)\351'%\322\251\0"
+  "\322\20\346\361\304\341\224%Y\222%Y\222E;\31\323\21\346\361eS\322\226dI\226dI\26\355d"
+  "\0\324\21\346q\205I\66eI\226dI\226d\321N\6\325\22\346\361DI\242MY\222%Y\222%"
+  "Y\264\223\1\326\21\346\361\324\241)K\262$K\262$\213v\62\0\327\14\346\361S\243L\324\242\234\33"
+  "\0\330\20\346qFS\226DJ_\244$\213\246\234\6\331\21\346\361\304Y%K\262$K\262$\213\206"
+  "\234\12\332\21\346\361\205Y%K\262$K\262$\213\206\234\12\333\23\346q\205I\224%Y\222%Y\222"
+  "%Y\64\344T\0\334\22\346\361\324\221,\311\222,\311\222,\311\242!\247\2\335\17\346\361\205Y%K"
+  "\262hH+CN\6\336\21\346\361\243\351\20eI\226dI\226\14QN\3\337\17\346\361\3Z\324%"
+  "\213j\211\224$:\31\340\20\346q\305\71\64GC\222%Y\64\344T\0\341\20\346\361\205\71\66GC"
+  "\222%Y\64\344T\0\342\20\346q\205I\16\315\321\220dI\26\15\71\25\343\21\346\361DI\242Cs"
+  "\64$Y\222ECN\5\344\20\346\361\3I\16\315\321\220dI\26\15\71\25\345\20\346q\205I\30\316"
+  "\321\220dI\26\15\71\25\346\15\346\361Ca\70$i\363\220S\1\347\15\346\361S\207$m\36\262\64"
+  "\14\1\350\20\346q\305\71\64$Y\222%\203\22\17\71\25\351\20\346\361\205\71\66$Y\222%\203\22\17"
+  "\71\25\352\20\346\361S\207$K\262dP\342!\15s\4\353\21\346\361\3I\16\15I\226d\311\240\304"
+  "CN\5\354\13\346q\305\71\244v\325\311\0\355\13\346\361\205\71\246v\325\311\0\356\14\346q\205I\16"
+  "\251]u\62\0\357\14\346\361\3I\16\251]u\62\0\360\21\346q$a%\234\262$K\262$\213v"
+  "\62\0\361\21\346\361\205\71\64DY\222%Y\222%YN\5\362\20\346q\305\71\64eI\226dI\26"
+  "\355d\0\363\20\346\361\205\71\66eI\226dI\26\355d\0\364\20\346q\205I\16MY\222%Y\222"
+  "E;\31\365\21\346\361DI\242CS\226dI\226d\321N\6\366\20\346\361\3I\16MY\222%Y"
+  "\222E;\31\367\13\346\361\223sh\320\241\234\31\370\17\346\361\223\242)RZ\244$\213\246\234\6\371\21"
+  "\346q\305\71\222%Y\222%Y\222ECN\5\372\21\346\361\205\71\224%Y\222%Y\222ECN\5"
+  "\373\22\346q\205I\216dI\226dI\226d\321\220S\1\374\22\346\361\3I\216dI\226dI\226d"
+  "\321\220S\1\375\23\346\361\205\71\224%Y\222%Y\222ECZ\31\42\0\376\22\346q\247\351\20eI"
+  "\226dI\226\14Q\232\203\0\377\23\346\361\3I\216dI\226dI\226d\321\220V\206\10\0\0\0\4"
+  "\377\377\0";
 
 // Ikona karty SPIFFS wyswietlana przy braku karty podczas startu
 static unsigned char spiffscard[] PROGMEM = {
@@ -1218,59 +1218,49 @@ void readEEPROM() // Funkcja kontrolna-debug, nie uzywan przez inne funkcje
 
 // Funkcja przetwarza tekst, zamieniając polskie znaki diakrytyczne
 void processText(String &text) {
-  for (int i = 0; i < text.length(); i++) {
-    switch (text[i]) {
-      case (char)0xC2:
-        switch (text[i + 1]) {
-          case (char)0xB3: text.setCharAt(i, 0xB3); break;  // Zamiana na "ł"
-          case (char)0x9C: text.setCharAt(i, 0x9C); break;  // Zamiana na "ś"
-          case (char)0x8C: text.setCharAt(i, 0x8C); break;  // Zamiana na "Ś"
-          case (char)0xB9: text.setCharAt(i, 0xB9); break;  // Zamiana na "ą"
-          case (char)0x9B: text.setCharAt(i, 0xEA); break;  // Zamiana na "ę"
-          case (char)0xBF: text.setCharAt(i, 0xBF); break;  // Zamiana na "ż"
-          case (char)0x9F: text.setCharAt(i, 0x9F); break;  // Zamiana na "ź"
+  for (int i = 0; i < text.length() - 1; i++) {
+    switch ((unsigned char)text[i]) {
+      case 0xC3:
+        switch ((unsigned char)text[i + 1]) {
+          case 0x93: text.setCharAt(i, 0xD3); break; // Ó
+          case 0xB3: text.setCharAt(i, 0xF3); break; // ó
+          case 0xA1: text.setCharAt(i, 0xE1); break; // á
+          case 0xA9: text.setCharAt(i, 0xE9); break; // é
         }
         text.remove(i + 1, 1);
         break;
-      case (char)0xC3:
-        switch (text[i + 1]) {
-          case (char)0xB1: text.setCharAt(i, 0xF1); break;  // Zamiana na "ń"
-          case (char)0xB3: text.setCharAt(i, 0xF3); break;  // Zamiana na "ó" Unicode UTF-8
-          case (char)0xBA: text.setCharAt(i, 0x9F); break;  // Zamiana na "ź"
-          case (char)0xBB: text.setCharAt(i, 0xAF); break;  // Zamiana na "Ż"
-          case (char)0x93: text.setCharAt(i, 0xD3); break;  // Zamiana na "Ó" Unicode UTF-8
+
+      case 0xC4:
+        switch ((unsigned char)text[i + 1]) {
+          case 0x84: text.setCharAt(i, 0xA5); break; // Ą
+          case 0x85: text.setCharAt(i, 0xB9); break; // ą
+          case 0x86: text.setCharAt(i, 0xC6); break; // Ć
+          case 0x87: text.setCharAt(i, 0xE6); break; // ć
+          case 0x98: text.setCharAt(i, 0xCA); break; // Ę
+          case 0x99: text.setCharAt(i, 0xEA); break; // ę
         }
         text.remove(i + 1, 1);
         break;
-      case (char)0xC4:
-        switch (text[i + 1]) {
-          case (char)0x85: text.setCharAt(i, 0xB9); break;  // Zamiana na "ą" Unicode UTF-8
-          case (char)0x99: text.setCharAt(i, 0xEA); break;  // Zamiana na "ę" Unicode UTF-8
-          case (char)0x87: text.setCharAt(i, 0xE6); break;  // Zamiana na "ć" Unicode UTF-8
-          case (char)0x84: text.setCharAt(i, 0xA5); break;  // Zamiana na "Ą" Unicode UTF-8
-          case (char)0x98: text.setCharAt(i, 0xCA); break;  // Zamiana na "Ę" Unicode UTF-8
-          case (char)0x86: text.setCharAt(i, 0xC6); break;  // Zamiana na "Ć" Unicode UTF-8
-        }
-        text.remove(i + 1, 1);
-        break;
-      case (char)0xC5:
-        switch (text[i + 1]) {
-          case (char)0x82: text.setCharAt(i, 0xB3); break;  // Zamiana na "ł" Unicode UTF-8
-          case (char)0x84: text.setCharAt(i, 0xF1); break;  // Zamiana na "ń" Unicode UTF-8
-          case (char)0x9B: text.setCharAt(i, 0x9C); break;  // Zamiana na "ź" Unicode UTF-8
-          case (char)0xBB: text.setCharAt(i, 0xAF); break;  // Zamiana na "Ż" Unicode UTF-8
-          case (char)0xBC: text.setCharAt(i, 0xBF); break;  // Zamiana na "ż" Unicode UTF-8
-          case (char)0x83: text.setCharAt(i, 0xD1); break;  // Zamiana na "Ń" Unicode UTF-8
-          case (char)0x9A: text.setCharAt(i, 0x97); break;  // Zamiana na "Ś" Unicode UTF-8
-          case (char)0x81: text.setCharAt(i, 0xA3); break;  // Zamiana na "Ł" Unicode UTF-8
-          case (char)0xB9: text.setCharAt(i, 0xAC); break;  // Zamiana na "Ź" Unicode UTF-8
-          case (char)0xBA: text.setCharAt(i, 0x9F); break;  // Zamiana na "ź" Unicode UTF-8
+
+      case 0xC5:
+        switch ((unsigned char)text[i + 1]) {
+          case 0x81: text.setCharAt(i, 0xA3); break; // Ł
+          case 0x82: text.setCharAt(i, 0xB3); break; // ł
+          case 0x83: text.setCharAt(i, 0xD1); break; // Ń
+          case 0x84: text.setCharAt(i, 0xF1); break; // ń
+          case 0x9A: text.setCharAt(i, 0x8C); break; // Ś
+          case 0x9B: text.setCharAt(i, 0x9C); break; // ś
+          case 0xB9: text.setCharAt(i, 0x8F); break; // Ź
+          case 0xBA: text.setCharAt(i, 0x9F); break; // ź
+          case 0xBB: text.setCharAt(i, 0xAF); break; // Ż
+          case 0xBC: text.setCharAt(i, 0xBF); break; // ż
         }
         text.remove(i + 1, 1);
         break;
     }
   }
 }
+
 
 void calcNec() // Funkcja umozliwajaca przeliczanie odwrotne aby "udawac" przyciskami klawiatury komendy piltoa w standardzie NEC
 {
@@ -1338,14 +1328,14 @@ void displayRadio()
       { 
         stationStringScroll = "---" ;
       } // wstawiamy trzy kreseczki do wyswietlenia
-      else // jezeli jest station name to prawiamy w "-- NAZWA --" i wysylamy do scrollera
+      else // jezeli jest station name to oprawiamy w "-- NAZWA --" i wysylamy do scrollera
       { 
         stationStringScroll = ("-- " + stationNameStream + " --");
       }  // Zmienna stationStringScroller przyjmuje wartość stationNameStream
     }
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
-      processText(stationString);  // przetwarzamy polsie znaki
+      processText(stationString);  // przetwarzamy polskie znaki
       stationStringScroll = stationString + "      "; // dodajemy separator do przewijanego tekstu
     }
     
@@ -1394,7 +1384,7 @@ void displayRadio()
     }
     else //stationString != "" -> ma wartość
     {
-      processText(stationString);  // przetwarzamy polsie znaki
+      processText(stationString);  // przetwarzamy polskie znaki
       stationStringScroll = String(StationNrStr) + "." + stationName + ", " + stationString + "      ";
       Serial.println(stationStringScroll);
     }
@@ -1445,7 +1435,7 @@ void displayRadio()
     }
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
-      processText(stationString);  // przetwarzamy polsie znaki
+      processText(stationString);  // przetwarzamy polskie znaki
       stationStringScroll = stationString;
     }
 
@@ -3367,7 +3357,7 @@ void recoveryModeCheck() {
     long newPos = myEnc.read() / 4;
 
     if (newPos > lastPos) {
-      recoveryMode = (recoveryMode + 2) % 3; // teraz kręcenie w prawo = w górę
+      recoveryMode = (recoveryMode + 2) % 3; // kręcenie w prawo = w górę
       displayRecoveryOption(recoveryMode);
       timeoutStart = millis();
     }
@@ -4484,7 +4474,7 @@ void assignRemoteCodes()
   rcCmdSrc = configRemoteArray[8];         // Przełączanie źródła radio, odtwarzacz
   rcCmdMute = configRemoteArray[9];        // Wyciszenie dzwieku
   rcCmdAud = configRemoteArray[10];        // Equalizer dzwieku
-  rcCmdDirect = configRemoteArray[11];     // Janość ekranu, dwa tryby 1/16 lub pełna janość     
+  rcCmdDirect = configRemoteArray[11];     // Jasność ekranu, dwa tryby 1/16 lub pełna jasność     
   rcCmdBankMinus = configRemoteArray[12];  // Wysweitla wybór banku
   rcCmdBankPlus = configRemoteArray[13];   // Wysweitla wybór banku
   rcCmdRed = configRemoteArray[14];        // Przełacza ładowanie banku kartaSPIFFS - serwer GitHub w menu bank
@@ -5764,7 +5754,7 @@ void loop()
 
 
       fwupd = false;        // Kasujemy flagę aktulizacji OTA gdyby była ustawiona
-      //displayActive = true; // jesli odbierzemy kod z pilota to uatywnij wyswietlacz i wyłacz przyciemnienie OLEDa
+      displayActive = true; // jesli odbierzemy kod z pilota to uatywnij wyswietlacz i wyłacz przyciemnienie OLEDa
       //displayDimmer(0); // jesli odbierzemy kod z pilota to wyłaczamy przyciemnienie wyswietlacza OLED
       displayPowerSave(0);
       
