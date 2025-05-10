@@ -8,7 +8,7 @@
 #include "Arduino.h"           // Standardowy nagłówek Arduino, który dostarcza podstawowe funkcje i definicje
 #include "Audio.h"             // Biblioteka do obsługi funkcji związanych z dźwiękiem i audio
 #include "SPI.h"               // Biblioteka do obsługi komunikacji SPI
-#include "SPIFFS.h"                // Biblioteka do obsługi kart SPIFFS
+#include "SD.h"                // Biblioteka do obsługi kart SD
 #include "FS.h"                // Biblioteka do obsługi systemu plików
 #include <U8g2lib.h>           // Biblioteka do obsługi wyświetlaczy
 #include <ezButton.h>          // Biblioteka do obsługi enkodera z przyciskiem
@@ -21,13 +21,18 @@
 #include <AsyncTCP.h>          // Bliblioteka TCP dla serwera web
 #include <Update.h>            // Blibioteka dla aktulizacji OTA
 #include <ESPmDNS.h>
-#include "font.h"              // Plik nagłówkowy z czcionką
 
 // Deklaracja wersji oprogramowania i nazwy hosta widocznego w routerze oraz na ekranie OLED i stronie www
 #define softwareRev "v3.17.65"  // Wersja oprogramowania radia
 #define hostname "esp32radio"  // Definicja nazwy hosta widoczna na zewnątrz
 
-// Definicja pinow dla wyswietlacza OLED
+// Definicja pinow czytnika karty SD
+#define SD_CS 47    // Pin CS (Chip Select) dla karty SD wybierany jako interfejs SPI
+#define SD_SCLK 45  // Pin SCK (Serial Clock) dla karty SD
+#define SD_MISO 21  // Pin MISO (Master In Slave Out) dla karty SD
+#define SD_MOSI 48  // pin MOSI (Master Out Slave In) dla karty SD
+
+// Definicja pinow dla wyswietlacza OLED 
 #define SPI_MOSI_OLED 39  // Pin MOSI (Master Out Slave In) dla interfejsu SPI OLED
 #define SPI_MISO_OLED 0   // Pin MISO (Master In Slave Out) brak dla wyswietlacza OLED
 #define SPI_SCK_OLED 38   // Pin SCK (Serial Clock) dla interfejsu SPI OLED
@@ -47,15 +52,10 @@
 // Enkoder 2 - uzywany dla radia
 #define CLK_PIN2 10             // Podłączenie z pinu 10 do CLK na enkoderze
 #define DT_PIN2 11              // Podłączenie z pinu 11 do DT na enkoderze lewym
-#define SW_PIN2 9               // Podłączenie z pinu 1 do SW na enkoderze lewym (przycisk)
+#define SW_PIN2 1               // Podłączenie z pinu 1 do SW na enkoderze lewym (przycisk)
 
-#include <Encoder.h>            // Biblioteka do obsługi enkodera
-Encoder myEnc(CLK_PIN2, DT_PIN2);
-long lastPos = 0;
-int8_t recoveryMode = 0; // Zmienna do przechowywania pozycji enkodera
-
-// IR odbiornik podczerwieni
-#define recv_pin 6
+// IR odbiornik podczerwieni 
+#define recv_pin 15
 
 // definicja dlugosci ilosci stacji w banku, dlugosci nazwy stacji w PSRAM/EEPROM, maksymalnej ilosci plikow audio (odtwarzacz)
 #define MAX_STATIONS 99          // Maksymalna liczba stacji radiowych, które mogą być przechowywane w jednym banku
@@ -63,13 +63,13 @@ int8_t recoveryMode = 0; // Zmienna do przechowywania pozycji enkodera
 #define MAX_FILES 100            // Maksymalna liczba plików lub katalogów w tablicy directoriesz
 
 
-#define STATIONS_URL1 "https://raw.githubusercontent.com/hevet/radio-player-stream/main/bank01.txt"       // Adres URL do pliku z listą stacji radiowych
-#define STATIONS_URL2 "https://raw.githubusercontent.com/hevet/radio-player-stream/main/bank02.txt"       // Adres URL do pliku z listą stacji radiowych
+#define STATIONS_URL1 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank01.txt"   // Adres URL do pliku z listą stacji radiowych
+#define STATIONS_URL2 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank02.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL3 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank03.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL4 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank04.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL5 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank05.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL6 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank06.txt"   // Adres URL do pliku z listą stacji radiowych
-#define STATIONS_URL7 "https://raw.githubusercontent.com/hevet/radio-player-stream/main/bank07.txt"       // Adres URL do pliku z listą stacji radiowych
+#define STATIONS_URL7 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank07.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL8 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank08.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL9 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank09.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL10 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank10.txt"  // Adres URL do pliku z listą stacji radiowych
@@ -89,15 +89,15 @@ uint16_t rcCmdArrowRight = 0; // strzałka w prawo - nastepna stacja
 uint16_t rcCmdArrowLeft = 0;  // strzałka w lewo - poprzednia stacja  
 uint16_t rcCmdArrowUp = 0;    // strzałka w góre - lista stacji krok do gory
 uint16_t rcCmdArrowDown = 0;  // strzałka w dół - lista stacj krok na dół
-uint16_t rcCmdBack = 0;          // Przycisk powrotu
+uint16_t rcCmdBack = 0;	      // Przycisk powrotu
 uint16_t rcCmdOk = 0;         // Przycisk Ent - zatwierdzenie stacji
 uint16_t rcCmdSrc = 0;        // Przełączanie źródła radio, odtwarzacz
 uint16_t rcCmdMute = 0;       // Wyciszenie dzwieku
 uint16_t rcCmdAud = 0;        // Equalizer dzwieku
-uint16_t rcCmdDirect = 0;     // Jasność ekranu, dwa tryby 1/16 lub pełna jasność     
+uint16_t rcCmdDirect = 0;     // Janość ekranu, dwa tryby 1/16 lub pełna janość     
 uint16_t rcCmdBankMinus = 0;  // Wysweitla wybór banku
 uint16_t rcCmdBankPlus = 0;   // Wysweitla wybór banku
-uint16_t rcCmdRed = 0;        // Przełacza ładowanie banku kartaSPIFFS - serwer GitHub w menu bank
+uint16_t rcCmdRed = 0;        // Przełacza ładowanie banku kartaSD - serwer GitHub w menu bank
 uint16_t rcCmdGreen = 0;      // VU wyłaczony, VU tryb 1, VU tryb 2, zegar
 uint16_t rcCmdKey0 = 0;       // Przycisk "0"
 uint16_t rcCmdKey1 = 0;       // Przycisk "1"
@@ -118,21 +118,21 @@ int stationFromBuffer = 0;      // Numer stacji radiowej przechowywanej w buforz
 uint8_t bank_nr;                // Numer aktualnie wybranego banku stacji z listy
 uint8_t previous_bank_nr = 0;   // Numer banku przed wejsciem do menu zmiany banku
 int bankFromBuffer = 0;         // Numer aktualnie wybranego banku stacji z listy do przywrócenia na ekran po bezczynności
-int CLK_state2;                 // Aktualny stan CLK enkodera lewego
-int prev_CLK_state2;            // Poprzedni stan CLK enkodera lewego
-int stationsCount = 0;          // Aktualna liczba przechowywanych stacji w tablicy
-//int fileFromBuffer = 0;       // Numer aktualnie wybranego pliku do przywrócenia na ekran po bezczynności
-uint8_t volumeValue = 10;       // Wartość głośności, domyślnie ustawiona na 10
-uint8_t volumeBufferValue = 0;  // Wartość głośności, domyślnie ustawiona na 10
+int CLK_state2;                        // Aktualny stan CLK enkodera lewego
+int prev_CLK_state2;                   // Poprzedni stan CLK enkodera lewego
+int stationsCount = 0;                 // Aktualna liczba przechowywanych stacji w tablicy
+//int fileFromBuffer = 0;                // Numer aktualnie wybranego pliku do przywrócenia na ekran po bezczynności
+uint8_t volumeValue = 10;                  // Wartość głośności, domyślnie ustawiona na 10
+uint8_t volumeBufferValue = 0;             // Wartość głośności, domyślnie ustawiona na 10
 int maxVisibleLines = 4;               // Maksymalna liczba widocznych linii na ekranie OLED
 int bitrateStringInt = 0;              // Deklaracja zmiennej do konwersji Bitrate string na wartosc Int aby podzelic bitrate przez 1000
 int buttonLongPressTime2 = 2000;       // Czas reakcji na długie nacisniecie enkoder 2
-int buttonShortPressTime2 = 500;       // Czas rekacji na krótkie nacisniecie enkodera 2
+int buttonShortPressTime2 = 500;       // Czas rekacjinna krótkie nacisniecie enkodera 2
 int buttonSuperLongPressTime2 = 4000;  // Czas reakcji na super długie nacisniecie enkoder 2
-uint8_t stationNameLenghtCut = 24;     // 24-> 25 znakow, 25-> 26 znaków, zmienna określająca jak długa nazwę ma nazwa stacji w plikach Bankow liczone od 0- wartosci ustalonej
+uint8_t stationNameLenghtCut = 24;    // 24-> 25 znakow, 25-> 26 znaków, zmienna określająca jak długa nazwę ma nazwa stacji w plikach Bankow liczone od 0- wartosci ustalonej
 
 // ---- Voice promt of Time every hour / Głosowe odtwarzanie czasu co godzinę ---- //
-bool voiceTimePlay = false;
+bool voiceTimePlay = false; 
 bool voiceTimePlayActionTaken = false;
 bool timeVoiceInfoEveryHour = true;
 
@@ -140,7 +140,7 @@ bool timeVoiceInfoEveryHour = true;
 // ---- Auto dimmer / auto przyciemnianie wyswietlacza ---- //
 uint8_t displayDimmerTimeCounter = 0;  // Zmienna inkrementowana w przerwaniu timera2 do przycimniania wyswietlacz
 uint8_t dimmerDisplayBrightness = 10;   // Wartość przyciemnienia wyswietlacza po czasie niekatywnosci
-uint8_t displayBrightness = 250;        // Domyślna maksymalna jasność wyswietlacza
+uint8_t displayBrightness = 250;        // Domyślna maksymalna janość wyswietlacza
 uint16_t displayAutoDimmerTime = 10;   // Czas po jakim nastąpi przyciemninie wyswietlacza, liczony w sekundach
 bool displayAutoDimmerOn = false;       // Automatyczne przyciemnianie wyswietlacza, domyślnie włączone
 bool displayDimmerActive = false;       // Aktywny tryb przyciemnienia
@@ -177,14 +177,13 @@ bool mp3 = false;                 // Flaga określająca, czy aktualny plik audi
 bool flac = false;                // Flaga określająca, czy aktualny plik audio jest w formacie FLAC
 bool aac = false;                 // Flaga określająca, czy aktualny plik audio jest w formacie AAC
 bool vorbis = false;              // Flaga określająca, czy aktualny plik audio jest w formacie VORBIS
-bool opus = false;                // Flaga określająca, czy aktualny plik audio jest w formacie OPUS
 bool id3tag = false;              // Flaga określająca, czy plik audio posiada dane ID3
 bool timeDisplay = true;          // Flaga określająca kiedy pokazać czas na wyświetlaczu, domyślnie od razu po starcie
 bool listedStations = false;      // Flaga określająca czy na ekranie jest pokazana lista stacji do wyboru
 //bool menuEnable = false;          // Flaga określająca czy na ekranie można wyświetlić menu
 bool bankMenuEnable = false;      // Flaga określająca czy na ekranie jest wyświetlone menu wyboru banku
 bool bitratePresent = false;      // Flaga określająca, czy na serial terminalu pojawiła się informacja o bitrate - jako ostatnia dana spływajaca z info
-bool bankNetworkUpdate = false;   // Flaga wyboru aktualizacji banku z sieci lub karty SPIFFS - True aktulizacja z NETu
+bool bankNetworkUpdate = false;   // Flaga wyboru aktualizacji banku z sieci lub karty SD - True aktulizacja z NETu
 bool volumeMute = false;          // Flaga okreslająca stan funkcji wyciszczenia - Mute
 bool volumeSet = false;           // Flaga wejscia menu regulacji głosnosci na enkoderze 2
 bool vuMeterOn = true;            // Flaga właczajaca wskazniki VU
@@ -192,8 +191,8 @@ bool vuMeterMode = false;         // tryb rysowania vuMeter
 bool action3Taken = false;        // Flaga Akcji 3 - załaczenia VU
 bool ActionNeedUpdateTime = false;// Zmiena okresaljaca dla displayRadio potrzebe odczytu aktulizacji czasu
 bool debugAudioBuffor = false;    // Wyswietlanie bufora Audio
-bool audioInfoRefresh = false;    // Flaga wymuszjąca wymagane odswiezenie ze względu na zmianę info stream
-bool noSPIFFScard = false;              // flaga ustawiana przy braku wykrycia karty SPIFFS
+bool audioInfoRefresh = false;    // Flaga wymuszjąca wymagane odsiwezenie ze względu na zmianę info stream
+bool noSDcard = false;              // flaga ustawiana przy braku wykrycia karty SD
 bool resumePlay = false;            // Flaga wymaganego uruchomienia odtwarzania po zakonczeniu komunikatu głosowego
 bool fwupd = false;               // Flaga blokujaca main loop podczas aktualizacji oprogramowania
 //bool displayBufforSendRquest = false;
@@ -207,7 +206,7 @@ unsigned long seconds = 0;            // Licznik sekund timera
 unsigned int PSRAM_lenght = MAX_STATIONS * (STATION_NAME_LENGTH) + MAX_STATIONS; // deklaracjia długości pamięci PSRAM
 unsigned long lastCheckTime = 0;      // No stream audio blink
 uint8_t stationNameStreamWidth = 0;   // Test pełnej nazwy stacji
-uint8_t x = 0;                             // Globalna zmienna pomocnicza
+uint8_t x = 0;                             // Globalna zmienna pomocnicza 
 
 unsigned long vuMeterTime;                 // Czas opznienia odswiezania wskaznikow VU w milisekundach
 uint8_t vuMeterL;                          // Wartosc VU dla L kanału zakres 0-255
@@ -265,8 +264,8 @@ String url2play = "";
 File myFile;  // Uchwyt pliku
 
 U8G2_SSD1322_NHD_256X64_F_4W_HW_SPI u8g2(U8G2_R2, /* cs=*/CS_OLED, /* dc=*/DC_OLED, /* reset=*/RESET_OLED);  // Hardware SPI 3.12inch OLED
-//U8G2_SH1122_256X64_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ CS_OLED, /* dc=*/ DC_OLED, /* reset=*/ RESET_OLED);        // Hardware SPI  2.08inch OLED
-//U8G2_SSPIFFS1363_256X128_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/CS_OLED, /* dc=*/DC_OLED, /* reset=*/RESET_OLED);  // Hardware SPI 3.12inch OLED
+//U8G2_SH1122_256X64_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/ CS_OLED, /* dc=*/ DC_OLED, /* reset=*/ RESET_OLED);		// Hardware SPI  2.08inch OLED
+//U8G2_SSD1363_256X128_F_4W_HW_SPI u8g2(U8G2_R0, /* cs=*/CS_OLED, /* dc=*/DC_OLED, /* reset=*/RESET_OLED);  // Hardware SPI 3.12inch OLED
 
 // Przypisujemy port serwera www
 AsyncWebServer server(80);
@@ -274,8 +273,8 @@ AsyncWebServer server(80);
 // Inicjalizacja WiFiManagera
 WiFiManager wifiManager;
 
-// Konfiguracja nowego SPI z wybranymi pinami dla czytnika kart SPIFFS
-//SPIClass customSPI = SPIClass(HSPI);  // Używamy HSPI, ale z własnymi pinami
+// Konfiguracja nowego SPI z wybranymi pinami dla czytnika kart SD
+SPIClass customSPI = SPIClass(HSPI);  // Używamy HSPI, ale z własnymi pinami
 
 ezButton button2(SW_PIN2);  // Utworzenie obiektu przycisku z enkodera 1 ezButton, podłączonego do pinu 1
 Audio audio;                // Obiekt do obsługi funkcji związanych z dźwiękiem i audio
@@ -311,7 +310,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     body {max-width: 1380px; margin:0px auto; padding-bottom: 25px;}
     .slider {-webkit-appearance: none; margin: 14px; width: 330px; height: 10px; background: #4CAF50; outline: none; -webkit-transition: .2s; transition: opacity .2s; border-radius: 5px;}
     .slider::-webkit-slider-thumb {-webkit-appearance: none; appearance: none; width: 35px; height: 25px; background: #4a4a4a; cursor: pointer; border-radius: 5px;}
-    .slider::-moz-range-thumb { width: 35px; height: 35px; background: #4a4a4a; cursor: pointer; border-radius: 5px;}
+    .slider::-moz-range-thumb { width: 35px; height: 35px; background: #4a4a4a; cursor: pointer; border-radius: 5px;} 
     .button { background-color: #4CAF50; border: 1; color: white; padding: 10px 20px; border-radius: 5px;}
     .buttonBank { background-color: #4CAF50; border: 1; color: white; padding: 8px 8px; border-radius: 5px; width: 35px; height: 35px; margin: 0 1.5px;}
     .buttonBankSelected { background-color: #505050; border: 1; color: white; padding: 8px 8px; border-radius: 5px; width: 35px; height: 35px; margin: 0 1.5px;}
@@ -322,9 +321,9 @@ const char index_html[] PROGMEM = R"rawliteral(
     .column { align: center; padding: 5px; display: flex; justify-content: space-between;}
     .columnlist { align: center; padding: 10px; display: flex; justify-content: center;}
     .stationList {text-align:left; margin-top: 0px; width: 280px; margin-bottom:0px;cursor: pointer;}
-      .stationNumberList {text-align:center; margin-top: 0px; width: 35px; margin-bottom:0px;}
-      .stationListSelected {text-align:left; margin-top: 0px; width: 280px; margin-bottom:0px;cursor: pointer; background-color: #4CAF50;}
-      .stationNumberListSelected {text-align:center; margin-top: 0px; width: 35px; margin-bottom:0px; background-color: #4CAF50;}
+	  .stationNumberList {text-align:center; margin-top: 0px; width: 35px; margin-bottom:0px;}
+	  .stationListSelected {text-align:left; margin-top: 0px; width: 280px; margin-bottom:0px;cursor: pointer; background-color: #4CAF50;}
+	  .stationNumberListSelected {text-align:center; margin-top: 0px; width: 35px; margin-bottom:0px; background-color: #4CAF50;}
   </style>
 </head>
 
@@ -332,7 +331,7 @@ const char index_html[] PROGMEM = R"rawliteral(
   <h2>ESP32 Web Radio</h2>
   <p style="font-size: 1rem;">Station:%STATIONNUMBER%  Bank:%BANKVALUE%</p>
   <p style="font-size: 1.6rem;"><span id="textStationName"><b> %STATIONNAMEVALUE%</b></span></p>
- 
+  
   <p>Volume: <span id="textSliderValue">%SLIDERVALUE%</span></p>
   <p><input type="range" onchange="updateSliderVolume(this)" id="volumeSlider" min="1" max="21" value="%SLIDERVALUE%" step="1" class="slider"></p>
   <br>
@@ -341,7 +340,7 @@ const char index_html[] PROGMEM = R"rawliteral(
   <p>Bank selection:</p>
        
   <script>
-  function updateSliderVolume(element)
+  function updateSliderVolume(element) 
   {
     var sliderValue = document.getElementById("volumeSlider").value;
     document.getElementById("textSliderValue").innerHTML = sliderValue;
@@ -351,7 +350,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     xhr.send();
   }
 
-  function volume(x)
+  function volume(x) 
   {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/volume" + x, true);
@@ -359,14 +358,14 @@ const char index_html[] PROGMEM = R"rawliteral(
     document.location.reload();
   }
 
-  function station(x)
+  function station(x) 
   {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/station" + x, true);
     xhr.send();
     document.location.reload();
   }
-  function stationLoad(x)
+  function stationLoad(x) 
   {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/update?station=" + x, false);
@@ -374,7 +373,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     document.location.reload();
     window.location.href=window.location.href();
   }
-  function bankLoad(x)
+  function bankLoad(x) 
   {
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/update?bank=" + x, false);
@@ -383,7 +382,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     window.location.href=window.location.href();
   }
  
-  function displayMode()
+  function displayMode() 
   {
     fetch("/displayMode")
   }
@@ -570,7 +569,7 @@ const char menu_html[] PROGMEM = R"rawliteral(
   <h2>ESP32 Web Radio - Menu</h2>
   <br><button class="button" onclick="location.href='/fwupdate'">OTA Update</button><br>
   <br><button class="button" onclick="location.href='/adc'">ADC Keyboard Settings</button><br>
-  <br><button class="button" onclick="location.href='/list'">SPIFFS Explorer</button><br>
+  <br><button class="button" onclick="location.href='/list'">SD / SPIFFS Explorer</button><br>
   <br><button class="button" onclick="location.href='/editor'">Memory Bank Editor</button><br>
   <br><button class="button" onclick="location.href='/config'">Configuration</button><br>
   <br><p style='font-size: 0.8rem;'><a href='/'>Go Back</a></p>
@@ -597,8 +596,103 @@ const long gmtOffset_sec = 3600;          // Przesunięcie czasu UTC w sekundach
 const int daylightOffset_sec = 3600;      // Przesunięcie czasu letniego w sekundach, dla Polski to 1 godzina
 
 
-// Ikona karty SPIFFS wyswietlana przy braku karty podczas startu
-static unsigned char spiffscard[] PROGMEM = {
+const uint8_t spleen6x12PL[2954] U8G2_FONT_SECTION("spleen6x12PL") =
+  "\340\1\3\2\3\4\1\3\4\6\14\0\375\10\376\11\377\1\225\3]\13f \7\346\361\363\237\0!\12"
+  "\346\361#i\357`\316\0\42\14\346\361\3I\226dI\316/\0#\21\346\361\303I\64HI\226dI"
+  "\64HIN\6$\22\346q\205CRK\302\61\311\222,I\206\60\247\0%\15\346\361cQK\32\246"
+  "I\324\316\2&\17\346\361#Z\324f\213\22-Zr\42\0'\11\346\361#i\235\237\0(\13\346\361"
+  "ia\332s\254\303\0)\12\346\361\310\325\36\63\235\2*\15\346\361S\243L\32&-\312\31\1+\13"
+  "\346\361\223\323l\320\322\234\31,\12\346\361\363)\15s\22\0-\11\346\361s\32t\236\0.\10\346\361"
+  "\363K\316\0/\15\346q\246a\32\246a\32\246\71\15\60\21\346\361\3S\226DJ\213\224dI\26\355"
+  "d\0\61\12\346\361#\241\332\343N\6\62\16\346\361\3S\226\226\246\64\35t*\0\63\16\346\361\3S"
+  "\226fr\232d\321N\6\64\14\346q\247\245\236\6\61\315\311\0\65\16\346q\17J\232\16qZ\31r"
+  "\62\0\66\20\346\361\3S\232\16Q\226dI\26\355d\0\67\13\346q\17J\226\206\325v\6\70\20\346"
+  "\361\3S\226d\321\224%Y\222E;\31\71\17\346\361\3S\226dI\26\15ii'\3:\11\346\361"
+  "\263\346L\71\3;\13\346\361\263\346\264\64\314I\0<\12\346\361cak\334N\5=\13\346\361\263\15"
+  ":\60\350\334\0>\12\346\361\3qk\330\316\2\77\14\346\361\3S\226\206\325\34\314\31@\21\346\361\3"
+  "S\226dI\262$K\262\304CN\5A\22\346\361\3S\226dI\226\14J\226dI\226S\1B\22"
+  "\346q\17Q\226d\311\20eI\226d\311\220\223\1C\14\346\361\3C\222\366<\344T\0D\22\346q"
+  "\17Q\226dI\226dI\226d\311\220\223\1E\16\346\361\3C\222\246C\224\226\207\234\12F\15\346\361"
+  "\3C\222\246C\224\266\63\1G\21\346\361\3C\222V\226,\311\222,\32r*\0H\22\346qgI"
+  "\226d\311\240dI\226dI\226S\1I\12\346\361\3c\332\343N\6J\12\346\361\3c\332\233\316\2"
+  "K\21\346qgI\226D\321\26\325\222,\311r*\0L\12\346q\247}\36r*\0M\20\346qg"
+  "\211eP\272%Y\222%YN\5N\20\346qg\211\224HI\77)\221\222\345T\0O\21\346\361\3"
+  "S\226dI\226dI\226d\321N\6P\17\346q\17Q\226dI\226\14QZg\2Q\22\346\361\3"
+  "S\226dI\226dI\226d\321\252\303\0R\22\346q\17Q\226dI\226\14Q\226dI\226S\1S"
+  "\16\346\361\3C\222\306sZ\31r\62\0T\11\346q\17Z\332w\6U\22\346qgI\226dI\226"
+  "dI\226d\321\220S\1V\20\346qgI\226dI\226dI\26m;\31W\21\346qgI\226d"
+  "I\226\264\14\212%\313\251\0X\21\346qgI\26%a%\312\222,\311r*\0Y\20\346qgI"
+  "\226dI\26\15ie\310\311\0Z\14\346q\17j\330\65\35t*\0[\13\346\361\14Q\332\257C\16"
+  "\3\134\15\346q\244q\32\247q\32\247\71\14]\12\346\361\14i\177\32r\30^\12\346\361#a\22e"
+  "\71\77_\11\346\361\363\353\240\303\0`\11\346\361\3q\235_\0a\16\346\361S\347hH\262$\213\206"
+  "\234\12b\20\346q\247\351\20eI\226dI\226\14\71\31c\14\346\361S\207$m\36r*\0d\21"
+  "\346\361ci\64$Y\222%Y\222ECN\5e\17\346\361S\207$K\262dP\342!\247\2f\14"
+  "\346\361#S\32\16Y\332\316\2g\21\346\361S\207$K\262$K\262hN\206\34\1h\20\346q\247"
+  "\351\20eI\226dI\226d\71\25i\13\346\361#\71\246v\325\311\0j\13\346\361C\71\230\366\246S"
+  "\0k\16\346q\247\245J&&YT\313\251\0l\12\346\361\3i\237u\62\0m\15\346\361\23\207("
+  "\351\337\222,\247\2n\20\346\361\23\207(K\262$K\262$\313\251\0o\16\346\361S\247,\311\222,"
+  "\311\242\235\14p\21\346\361\23\207(K\262$K\262d\210\322*\0q\20\346\361S\207$K\262$K"
+  "\262hH[\0r\14\346\361S\207$K\322v&\0s\15\346\361S\207$\236\323d\310\311\0t\13"
+  "\346\361\3i\70\246\315:\31u\20\346\361\23\263$K\262$K\262h\310\251\0v\16\346\361\23\263$"
+  "K\262$\213\222\60gw\17\346\361\23\263$KZ\6\305\222\345T\0x\16\346\361\23\263$\213\266)"
+  "K\262\234\12y\22\346\361\23\263$K\262$K\262hH\223!G\0z\14\346\361\23\7\65l\34t"
+  "*\0{\14\346\361iiM\224\323\262\16\3|\10\346q\245\375;\5}\14\346\361\310iY\324\322\232"
+  "N\1~\12\346\361s\213\222D\347\10\177\7\346\361\363\237\0\200\6\341\311\243\0\201\6\341\311\243\0\202"
+  "\6\341\311\243\0\203\6\341\311\243\0\204\6\341\311\243\0\205\6\341\311\243\0\206\6\341\311\243\0\207\6\341"
+  "\311\243\0\210\6\341\311\243\0\211\6\341\311\243\0\212\6\341\311\243\0\213\6\341\311\243\0\214\16\346\361e"
+  "C\222\306sZ\31r\62\0\215\6\341\311\243\0\216\6\341\311\243\0\217\14\346qe\203T\354\232\16:"
+  "\25\220\6\341\311\243\0\221\6\341\311\243\0\222\6\341\311\243\0\223\6\341\311\243\0\224\6\341\311\243\0\225"
+  "\6\341\311\243\0\226\6\341\311\243\0\227\16\346\361eC\222\306sZ\31r\62\0\230\6\341\311\243\0\231"
+  "\6\341\311\243\0\232\6\341\311\243\0\233\6\341\311\243\0\234\16\346\361\205\71\66$\361\234&CN\6\235"
+  "\6\341\311\243\0\236\6\341\311\243\0\237\15\346\361\205\71\64\250a\343\240S\1\240\7\346\361\363\237\0\241"
+  "\23\346\361\3S\226dI\226\14J\226dI\26\306\71\0\242\21\346\361\23\302!\251%Y\222%\341\220"
+  "\345\24\0\243\14\346q\247-\231\230\306CN\5\244\22\346\361\3S\226dI\226\14J\226dI\26\346"
+  "\4\245\22\346\361\3S\226dI\226\14J\226dI\26\346\4\246\16\346\361eC\222\306sZ\31r\62"
+  "\0\247\17\346\361#Z\224\245Z\324\233\232E\231\4\250\11\346\361\3I\316\237\1\251\21\346\361\3C\22"
+  "J\211\22)\221bL\206\234\12\252\15\346\361#r\66\325vd\310\31\1\253\17\346\361\223\243$J\242"
+  "\266(\213r\42\0\254\14\346qe\203T\354\232\16:\25\255\10\346\361s\333y\3\256\21\346\361\3C"
+  "\22*\226d\261$c\62\344T\0\257\14\346qe\203\32vM\7\235\12\260\12\346\361#Z\324\246\363"
+  "\11\261\20\346\361S\347hH\262$\213\206\64\314\21\0\262\14\346\361#Z\224\206\305!\347\6\263\13\346"
+  "\361\3i\252\251\315:\31\264\11\346\361Ca\235\337\0\265\14\346\361\23\243\376i\251\346 \0\266\16\346"
+  "\361\205\71\66$\361\234&CN\6\267\10\346\361s\314y\4\270\11\346\361\363\207\64\14\1\271\20\346\361"
+  "S\347hH\262$\213\206\64\314\21\0\272\15\346\361#Z\324\233\16\15\71#\0\273\17\346\361\23\243,"
+  "\312\242\226(\211r\62\0\274\15\346\361\205\71\64\250a\343\240S\1\275\17\346\361\204j-\211\302\26\245"
+  "\24\26\207\0\276\21\346\361hQ\30'\222\64\206ZR\33\302\64\1\277\15\346\361#\71\64\250a\343\240"
+  "S\1\300\21\346\361\304\341\224%Y\62(Y\222%YN\5\301\21\346\361\205\341\224%Y\62(Y\222"
+  "%YN\5\302\22\346q\205I\66eI\226\14J\226dI\226S\1\303\23\346\361DI\242MY\222"
+  "%\203\222%Y\222\345T\0\304\20\346\361S\347hH\262$\213\206\64\314\21\0\305\16\346\361eC\222"
+  "\306sZ\31r\62\0\306\14\346\361eC\222\366<\344T\0\307\15\346\361\3C\222\366<di\30\2"
+  "\310\17\346\361\304\341\220\244\351\20\245\361\220S\1\311\17\346\361\205\341\220\244\351\20\245\361\220S\1\312\20"
+  "\346\361\3C\222\246C\224\226\207\64\314\21\0\313\17\346\361\324\241!I\323!J\343!\247\2\314\13\346"
+  "\361\304\341\230v\334\311\0\315\13\346\361\205\341\230v\334\311\0\316\14\346q\205I\66\246\35w\62\0\317"
+  "\13\346\361\324\241\61\355\270\223\1\320\15\346\361\3[\324\262D}\332\311\0\321\20\346\361EIV\221\22"
+  ")\351'%\322\251\0\322\20\346\361\304\341\224%Y\222%Y\222E;\31\323\20\346\361\205\341\224%Y"
+  "\222%Y\222E;\31\324\21\346q\205I\66eI\226dI\226d\321N\6\325\22\346\361DI\242M"
+  "Y\222%Y\222%Y\264\223\1\326\21\346\361\324\241)K\262$K\262$\213v\62\0\327\14\346\361S"
+  "\243L\324\242\234\33\0\330\20\346qFS\226DJ_\244$\213\246\234\6\331\21\346\361\304Y%K\262"
+  "$K\262$\213\206\234\12\332\21\346\361\205Y%K\262$K\262$\213\206\234\12\333\23\346q\205I\224"
+  "%Y\222%Y\222%Y\64\344T\0\334\22\346\361\324\221,\311\222,\311\222,\311\242!\247\2\335\17"
+  "\346\361\205Y%K\262hH+CN\6\336\21\346\361\243\351\20eI\226dI\226\14QN\3\337\17"
+  "\346\361\3Z\324%\213j\211\224$:\31\340\20\346q\305\71\64GC\222%Y\64\344T\0\341\20\346"
+  "\361\205\71\66GC\222%Y\64\344T\0\342\11\346\361Ca\235\337\0\343\21\346\361DI\242Cs\64"
+  "$Y\222ECN\5\344\20\346\361\3I\16\315\321\220dI\26\15\71\25\345\20\346q\205I\30\316\321"
+  "\220dI\26\15\71\25\346\15\346\361Ca\70$i\363\220S\1\347\15\346\361S\207$m\36\262\64\14"
+  "\1\350\20\346q\305\71\64$Y\222%\203\22\17\71\25\351\20\346\361\205\71\66$Y\222%\203\22\17\71"
+  "\25\352\20\346\361S\207$K\262dP\342!\254C\0\353\21\346\361\3I\16\15I\226d\311\240\304C"
+  "N\5\354\13\346q\305\71\244v\325\311\0\355\13\346\361\205\71\246v\325\311\0\356\14\346q\205I\16\251"
+  "]u\62\0\357\14\346\361\3I\16\251]u\62\0\360\21\346q$a%\234\262$K\262$\213v\62"
+  "\0\361\21\346\361\205\71\64DY\222%Y\222%YN\5\362\20\346q\305\71\64eI\226dI\26\355"
+  "d\0\363\20\346\361\205\71\66eI\226dI\26\355d\0\364\20\346q\205I\16MY\222%Y\222E"
+  ";\31\365\21\346\361c\222\222HI\226dI\66\15\221N\4\366\20\346\361\3I\16MY\222%Y\222"
+  "E;\31\367\13\346\361\223sh\320\241\234\31\370\17\346\361\223\242)RZ\244$\213\246\234\6\371\21\346"
+  "q\305\71\222%Y\222%Y\222ECN\5\372\21\346\361\205\71\224%Y\222%Y\222ECN\5\373"
+  "\22\346q\205I\216dI\226dI\226d\321\220S\1\374\22\346\361\3I\216dI\226dI\226d\321"
+  "\220S\1\375\23\346\361\205\71\224%Y\222%Y\222ECZ\31\42\0\376\22\346q\247\351\20eI\226"
+  "dI\226\14Q\232\203\0\377\23\346\361\3I\216dI\226dI\226d\321\220V\206\10\0\0\0\4\377"
+  "\377\0";
+
+// Ikona karty SD wyswietlana przy braku karty podczas startu
+static unsigned char sdcard[] PROGMEM = {
   0xf0, 0xff, 0xff, 0x0f, 0xf8, 0xff, 0xff, 0x1f, 0xf8, 0xcf, 0xf3, 0x3f,
   0x38, 0x49, 0x92, 0x3c, 0x38, 0x49, 0x92, 0x3c, 0x38, 0x49, 0x92, 0x3c,
   0x38, 0x49, 0x92, 0x3c, 0x38, 0x49, 0x92, 0x3c, 0x38, 0x49, 0x92, 0x3c,
@@ -612,7 +706,7 @@ static unsigned char spiffscard[] PROGMEM = {
   0xff, 0x87, 0x78, 0x3c, 0xff, 0x87, 0x38, 0x3e, 0x3f, 0x80, 0x00, 0x3e,
   0x1f, 0xc0, 0x00, 0x3f, 0x3f, 0xe0, 0x80, 0x3f, 0xff, 0xff, 0xff, 0x3f,
   0xff, 0xff, 0xff, 0x3f, 0xff, 0xff, 0xff, 0x3f, 0xfe, 0xff, 0xff, 0x1f,
-  0xfc, 0xff, 0xff, 0x0f
+  0xfc, 0xff, 0xff, 0x0f 
   };
 
 // Obrazek nutek wyswietlany przy starcie
@@ -768,7 +862,7 @@ unsigned long pulse_duration_560us = 0;  // Tylko do analizy - Czas trwania impu
 unsigned long pulse_duration_1690us = 0; // Tylko do analizy - Czas trwania impulsu
 
 bool pulse_ready9ms = false;            // Flaga sygnału gotowości puls 9ms
-bool pulse_ready_low = false;           // Flaga sygnału gotowości
+bool pulse_ready_low = false;           // Flaga sygnału gotowości 
 unsigned long pulse_start_low = 0;      // Czas początkowy impulsu
 unsigned long pulse_end_low = 0;        // Czas końcowy impulsu
 unsigned long pulse_duration_low = 0;   // Czas trwania impulsu
@@ -822,7 +916,7 @@ bool debugKeyboard = false;         // Wyłącza wywoływanie funkcji i zostawia
 bool adcKeyboardEnabled = false;    // Flaga właczajaca działanie klawiatury ADC
 
 //Funkcja odpowiedzialna za zapisywanie informacji o stacji do pamięci EEPROM.
-void saveStationToPSRAM(const char *station)
+void saveStationToPSRAM(const char *station) 
 {
   // Sprawdź, czy istnieje jeszcze miejsce na kolejną stację w pamięci EEPROM.
   if (stationsCount < MAX_STATIONS) {
@@ -833,7 +927,7 @@ void saveStationToPSRAM(const char *station)
       // Zapisz długość linku jako pierwszy bajt.
       psramData[stationsCount * (STATION_NAME_LENGTH + 1)] = length;
       // Zapisz link jako kolejne bajty w pamięci EEPROM.
-      for (int i = 0; i < length; i++)
+      for (int i = 0; i < length; i++) 
       {
         psramData[stationsCount * (STATION_NAME_LENGTH + 1) + 1 + i] = station[i];
       }
@@ -853,7 +947,7 @@ void saveStationToPSRAM(const char *station)
 
       u8g2.drawRFrame(21, 42, 212, 12, 3);  // Ramka paska postępu ladowania stacji stacji w>8 h>8
       x = (stationsCount * 2) + 8;          // Dodajemy gdy stationCount=1 + 8 aby utrzymac warunek dla zaokrąglonego drawRBox - szerokość W>6 h>6 ma byc W>=2*(r+1), h >= 2*(r+1)
-      u8g2.drawRBox(23, 44, x, 8, 2);       // Pasek postepu ladowania stacji z serwera lub karty SPIFFS
+      u8g2.drawRBox(23, 44, x, 8, 2);       // Pasek postepu ladowania stacji z serwera lub karty SD
       u8g2.sendBuffer();
     } else {
       // Informacja o błędzie w przypadku zbyt długiego linku do stacji.
@@ -889,25 +983,25 @@ void sanitizeAndSaveStation(const char *station) {
   saveStationToPSRAM(sanitizedStation);
 }
 
-// Jesli dany bank istnieje juz na karcie SPIFFS to odczytujemy tylko dany Bank z karty
-void readSPIFFSStations() {
+// Jesli dany bank istnieje juz na karcie SD to odczytujemy tylko dany Bank z karty
+void readSDStations() {
   stationsCount = 0;
-  Serial.println("Plik Banu isnieje na karcie SPIFFS, czytamy TYLKO z karty");
+  Serial.println("Plik Banu isnieje na karcie SD, czytamy TYLKO z karty");
   //mp3 = flac = aac = false;
-   mp3 = flac = aac = vorbis = opus = false;
+   mp3 = flac = aac = vorbis = false;
   stationString.remove(0);  // Usunięcie wszystkich znaków z obiektu stationString
 
   // Tworzymy nazwę pliku banku
   String fileName = String("/bank") + (bank_nr < 10 ? "0" : "") + String(bank_nr) + ".txt";
 
   // Sprawdzamy, czy plik istnieje
-  if (!SPIFFS.exists(fileName)) {
+  if (!SD.exists(fileName)) {
     Serial.println("Błąd: Plik banku nie istnieje.");
     return;
   }
 
   // Otwieramy plik w trybie do odczytu
-  File bankFile = SPIFFS.open(fileName, FILE_READ);
+  File bankFile = SD.open(fileName, FILE_READ);
   if (!bankFile)  // jesli brak pliku to...
   {
     Serial.println("Błąd: Nie można otworzyć pliku banku.");
@@ -945,7 +1039,7 @@ void readSPIFFSStations() {
 }
 
 // Funkcja do pobierania listy stacji radiowych z serwera
-void fetchStationsFromServer()
+void fetchStationsFromServer() 
 {
   bankChange = true;
   displayActive = true;
@@ -954,10 +1048,10 @@ void fetchStationsFromServer()
   //u8g2.drawStr(21, 10, "Bank:");
   //u8g2.drawStr(51, 10, String(bank_nr).c_str());
   //u8g2.drawStr(21, 23, "Loading station from:");
-  u8g2.setCursor(10, 23);
+  u8g2.setCursor(21, 23);
   u8g2.print("Loading BANK:" + String(bank_nr) + " stations from:");
   u8g2.sendBuffer();
- 
+  
   currentSelection = 0;
   firstVisibleLine = 0;
   station_nr = 1;
@@ -969,7 +1063,7 @@ void fetchStationsFromServer()
   // URL stacji dla danego banku
   String url;
  
- 
+  
 
   // Wybierz URL na podstawie bank_nr za pomocą switch
   switch (bank_nr) {
@@ -1025,21 +1119,21 @@ void fetchStationsFromServer()
       Serial.println("Nieprawidłowy numer banku");
       return;
   }
- 
+  
 
   // Tworzenie nazwy pliku dla danego banku
   String fileName = String("/bank") + (bank_nr < 10 ? "0" : "") + String(bank_nr) + ".txt";
 
   // Sprawdzenie, czy plik istnieje
-  if (SPIFFS.exists(fileName) && bankNetworkUpdate == false)
+  if (SD.exists(fileName) && bankNetworkUpdate == false) 
   {
     Serial.println("Plik banku " + fileName + " już istnieje.");
     u8g2.setFont(spleen6x12PL);
     //u8g2.drawStr(147, 23, "SD card");
-    u8g2.print("SPIFFS CARD");
+    u8g2.print("SD CARD");
     u8g2.sendBuffer();
-    readSPIFFSStations();  // Jesli plik istnieje to odczytujemy go tylko z karty
-  }
+    readSDStations();  // Jesli plik istnieje to odczytujemy go tylko z karty
+  } 
   else
   //if (bankNetworkUpdate = true)
   {
@@ -1050,13 +1144,13 @@ void fetchStationsFromServer()
     u8g2.sendBuffer();
     {
       // Próba utworzenia pliku, jeśli nie istnieje
-      File bankFile = SPIFFS.open(fileName, FILE_WRITE);
+      File bankFile = SD.open(fileName, FILE_WRITE);
 
-      if (bankFile)
+      if (bankFile) 
       {
         Serial.println("Utworzono plik banku: " + fileName);
         bankFile.close();  // Zamykanie pliku po utworzeniu
-      } else
+      } else 
       {
         Serial.println("Błąd: Nie można utworzyć pliku banku: " + fileName);
       //  return;  // Przerwij dalsze działanie, jeśli nie udało się utworzyć pliku
@@ -1080,7 +1174,7 @@ void fetchStationsFromServer()
       //Serial.println("Stacje pobrane z serwera:");
       //Serial.println(payload);  // Wyświetlenie pobranych danych (payload)
       // Otwórz plik w trybie zapisu, aby zapisać payload
-      File bankFile = SPIFFS.open(fileName, FILE_WRITE);
+      File bankFile = SD.open(fileName, FILE_WRITE);
       if (bankFile) {
         bankFile.println(payload);  // Zapisz dane do pliku
         bankFile.close();           // Zamknij plik po zapisaniu
@@ -1099,7 +1193,7 @@ void fetchStationsFromServer()
 
         // Sprawdź, czy stacja nie jest pusta, a następnie przetwórz i zapisz
         if (!station.isEmpty()) {
-          // Zapisz stację do pliku na karcie SPIFFS
+          // Zapisz stację do pliku na karcie SD
           sanitizeAndSaveStation(station.c_str());
         }
         // Przesuń indeks początkowy do kolejnej linii
@@ -1115,88 +1209,62 @@ void fetchStationsFromServer()
   bankChange = false;
 }
 
-void readEEPROM() // Funkcja kontrolna-debug, nie uzywana przez inne funkcje
+void readEEPROM() // Funkcja kontrolna-debug, nie uzywan przez inne funkcje
 {
   EEPROM.get(0, station_nr);
   EEPROM.get(1, bank_nr);
-  EEPROM.get(2, volumeValue);
+  EEPROM.get(2, volumeValue); 
 }
-
-void removeUtf8Bom(String &text) {
-  if (text.length() >= 3 &&
-      (uint8_t)text[0] == 0xEF &&
-      (uint8_t)text[1] == 0xBB &&
-      (uint8_t)text[2] == 0xBF) {
-    text.remove(0, 3);  // usuń bajty EF BB BF
-  }
-}
-
-
-// Naprawa błędnie zdekodowanych znaków (krzaczki typu ê -> ę)
-void fixBrokenUtf8(String &text) {
-
-  //removeUtf8Bom(text);  // usuń BOM, jeśli jest obecny
-  
-  // Napraw błędne znaki diakrytyczne (Windows-1252 interpretacja)
-  text.replace("ê", "ę");
-  text.replace("Ê", "Ę");
-  text.replace("æ", "ć");
-  text.replace("Æ", "Ć");
-  text.replace("œ", "ś");
-  text.replace("Œ", "Ś");
-  text.replace("¿", "ż");
-  text.replace("Ñ", "Ń");
-  text.replace("ñ", "ń");
-  text.replace("á", "ą");
-  text.replace("Á", "Ą");
-  text.replace("³", "ł");
-  text.replace("£", "Ł");
-  text.replace("ó", "ó");
-  text.replace("Ó", "Ó");
-  text.replace("Å‚", "ł");
-  text.replace("Å»", "Ż");
-}
-
-
 
 // Funkcja przetwarza tekst, zamieniając polskie znaki diakrytyczne
 void processText(String &text) {
-  for (int i = 0; i < text.length() - 1; i++) {
-    switch ((unsigned char)text[i]) {
-      case 0xC3:
-        switch ((unsigned char)text[i + 1]) {
-          case 0x93: text.setCharAt(i, 0xD3); break; // Ó
-          case 0xB3: text.setCharAt(i, 0xF3); break; // ó
-          case 0xA1: text.setCharAt(i, 0xE1); break; // á
-          case 0xA9: text.setCharAt(i, 0xE9); break; // é
+  for (int i = 0; i < text.length(); i++) {
+    switch (text[i]) {
+      case (char)0xC2:
+        switch (text[i + 1]) {
+          case (char)0xB3: text.setCharAt(i, 0xB3); break;  // Zamiana na "ł"
+          case (char)0x9C: text.setCharAt(i, 0x9C); break;  // Zamiana na "ś"
+          case (char)0x8C: text.setCharAt(i, 0x8C); break;  // Zamiana na "Ś"
+          case (char)0xB9: text.setCharAt(i, 0xB9); break;  // Zamiana na "ą"
+          case (char)0x9B: text.setCharAt(i, 0xEA); break;  // Zamiana na "ę"
+          case (char)0xBF: text.setCharAt(i, 0xBF); break;  // Zamiana na "ż"
+          case (char)0x9F: text.setCharAt(i, 0x9F); break;  // Zamiana na "ź"
         }
         text.remove(i + 1, 1);
         break;
-
-      case 0xC4:
-        switch ((unsigned char)text[i + 1]) {
-          case 0x84: text.setCharAt(i, 0xA5); break; // Ą
-          case 0x85: text.setCharAt(i, 0xB9); break; // ą
-          case 0x86: text.setCharAt(i, 0xC6); break; // Ć
-          case 0x87: text.setCharAt(i, 0xE6); break; // ć
-          case 0x98: text.setCharAt(i, 0xCA); break; // Ę
-          case 0x99: text.setCharAt(i, 0xEA); break; // ę
+      case (char)0xC3:
+        switch (text[i + 1]) {
+          case (char)0xB1: text.setCharAt(i, 0xF1); break;  // Zamiana na "ń"
+          case (char)0xB3: text.setCharAt(i, 0xF3); break;  // Zamiana na "ó" Unicode UTF-8
+          case (char)0xBA: text.setCharAt(i, 0x9F); break;  // Zamiana na "ź"
+          case (char)0xBB: text.setCharAt(i, 0xAF); break;  // Zamiana na "Ż"
+          case (char)0x93: text.setCharAt(i, 0xD3); break;  // Zamiana na "Ó" Unicode UTF-8
         }
         text.remove(i + 1, 1);
         break;
-
-      case 0xC5:
-        switch ((unsigned char)text[i + 1]) {
-          case 0x81: text.setCharAt(i, 0xA3); break; // Ł
-          case 0x82: text.setCharAt(i, 0xB3); break; // ł
-          case 0x83: text.setCharAt(i, 0xD1); break; // Ń
-          case 0x84: text.setCharAt(i, 0xF1); break; // ń
-          case 0x9A: text.setCharAt(i, 0x8C); break; // Ś
-          case 0x9B: text.setCharAt(i, 0x9C); break; // ś
-          case 0xB9: text.setCharAt(i, 0x8F); break; // Ź
-          case 0xBA: text.setCharAt(i, 0x9F); break; // ź
-          case 0xBB: text.setCharAt(i, 0xAF); break; // Ż
-          case 0xBC: text.setCharAt(i, 0xBF); break; // ż
+      case (char)0xC4:
+        switch (text[i + 1]) {
+          case (char)0x85: text.setCharAt(i, 0xB9); break;  // Zamiana na "ą" Unicode UTF-8
+          case (char)0x99: text.setCharAt(i, 0xEA); break;  // Zamiana na "ę" Unicode UTF-8
+          case (char)0x87: text.setCharAt(i, 0xE6); break;  // Zamiana na "ć" Unicode UTF-8
+          case (char)0x84: text.setCharAt(i, 0xA5); break;  // Zamiana na "Ą" Unicode UTF-8
+          case (char)0x98: text.setCharAt(i, 0xCA); break;  // Zamiana na "Ę" Unicode UTF-8
+          case (char)0x86: text.setCharAt(i, 0xC6); break;  // Zamiana na "Ć" Unicode UTF-8
+        }
+        text.remove(i + 1, 1);
+        break;
+      case (char)0xC5:
+        switch (text[i + 1]) {
+          case (char)0x82: text.setCharAt(i, 0xB3); break;  // Zamiana na "ł" Unicode UTF-8
+          case (char)0x84: text.setCharAt(i, 0xF1); break;  // Zamiana na "ń" Unicode UTF-8
+          case (char)0x9B: text.setCharAt(i, 0x9C); break;  // Zamiana na "ź" Unicode UTF-8
+          case (char)0xBB: text.setCharAt(i, 0xAF); break;  // Zamiana na "Ż" Unicode UTF-8
+          case (char)0xBC: text.setCharAt(i, 0xBF); break;  // Zamiana na "ż" Unicode UTF-8
+          case (char)0x83: text.setCharAt(i, 0xD1); break;  // Zamiana na "Ń" Unicode UTF-8
+          case (char)0x9A: text.setCharAt(i, 0x97); break;  // Zamiana na "Ś" Unicode UTF-8
+          case (char)0x81: text.setCharAt(i, 0xA3); break;  // Zamiana na "Ł" Unicode UTF-8
+          case (char)0xB9: text.setCharAt(i, 0xAC); break;  // Zamiana na "Ź" Unicode UTF-8
+          case (char)0xBA: text.setCharAt(i, 0x9F); break;  // Zamiana na "ź" Unicode UTF-8
         }
         text.remove(i + 1, 1);
         break;
@@ -1204,11 +1272,10 @@ void processText(String &text) {
   }
 }
 
-
 void calcNec() // Funkcja umozliwajaca przeliczanie odwrotne aby "udawac" przyciskami klawiatury komendy piltoa w standardzie NEC
 {
   //składamy kod pilota do postaci ADDR/CMD/CMD/ADDR aby miec 4 bajty
-  uint8_t CMD = (ir_code >> 8) & 0xFF;
+  uint8_t CMD = (ir_code >> 8) & 0xFF; 
   uint8_t ADDR = ir_code & 0xFF;        
   ir_code =  ADDR;
   ir_code = (ir_code << 8) | CMD;
@@ -1218,8 +1285,8 @@ void calcNec() // Funkcja umozliwajaca przeliczanie odwrotne aby "udawac" przyci
   uint8_t IADDR = (ir_code >> 16) & 0xFF; // Drugi bajt (inwersja adresu)
   CMD = (ir_code >> 8) & 0xFF;            // Trzeci bajt (komenda)
   uint8_t ICMD = ir_code & 0xFF;          // Czwarty bajt (inwersja komendy)
- 
-  // Dorabiamy brakujące odwórcone bajty
+  
+  // Dorabiamy brakujące odwórcone bajty 
   IADDR = IADDR ^ 0xFF;
   ICMD = ICMD ^ 0xFF;
 
@@ -1232,7 +1299,7 @@ void calcNec() // Funkcja umozliwajaca przeliczanie odwrotne aby "udawac" przyci
 }
 
 // Obsługa wyświetlacza dla odtwarzanego strumienia radia internetowego
-void displayRadio()
+void displayRadio() 
 {
   if (displayMode == 0)
   {
@@ -1268,20 +1335,17 @@ void displayRadio()
     if (stationString == "") // Jeżeli stationString jest pusty i stacja go nie nadaje
     {    
       if (stationNameStream == "") // jezeli nie ma równiez stationName
-      {
+      { 
         stationStringScroll = "---" ;
       } // wstawiamy trzy kreseczki do wyswietlenia
-      else // jezeli jest station name to oprawiamy w "-- NAZWA --" i wysylamy do scrollera
-      {
-        processText(stationNameStream);
+      else // jezeli jest station name to prawiamy w "-- NAZWA --" i wysylamy do scrollera
+      { 
         stationStringScroll = ("-- " + stationNameStream + " --");
       }  // Zmienna stationStringScroller przyjmuje wartość stationNameStream
     }
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
-      removeUtf8Bom(stationString); // usuwamy BOM, jezeli jest obecny
-      fixBrokenUtf8(stationString);    // najpierw napraw "krzaki" typu ê -> ę
-      processText(stationString);  // przetwarzamy polskie znaki
+      processText(stationString);  // przetwarzamy polsie znaki
       stationStringScroll = stationString + "      "; // dodajemy separator do przewijanego tekstu
     }
     
@@ -1289,7 +1353,7 @@ void displayRadio()
     //Serial.println(stationStringScroll);
         
         
-    //Liczymy długość napisu stationStringScroll
+    //Liczymy długość napisu stationStringScroll 
     stationStringScrollWidth = stationStringScroll.length() * 6;
 
     u8g2.drawLine(0, 52, 255, 52);
@@ -1312,9 +1376,9 @@ void displayRadio()
     u8g2.drawLine(0, 50, 255, 50); // Linia separacyjna zegar, dolna linijka radia
 
     char StationNrStr[3];
-    snprintf(StationNrStr, sizeof(StationNrStr), "%02d", station_nr);
+    snprintf(StationNrStr, sizeof(StationNrStr), "%02d", station_nr); 
     //stationName = stationName.substring(0, 25);
-    int StationNameEnd = stationName.indexOf("  "); // Wycinamy nazwe stacji tylko do miejsca podwojnej spacji
+    int StationNameEnd = stationName.indexOf("  "); // Wycinamy nazwe stacji tylko do miejsca podwojnej spacji 
     stationName = stationName.substring(0, StationNameEnd);
  
     if (stationString == "")                // Jeżeli stationString jest pusty i stacja go nie nadaje
@@ -1324,20 +1388,20 @@ void displayRadio()
         stationStringScroll = String(StationNrStr) + "." + stationName + ", ---" ;
       }      // wstawiamy trzy kreseczki do wyswietlenia
       else                                  // jezeli jest brak "stationString" ale jest "stationName" to składamy NR.Nazwa stacji z pliku, nadawany stationNameStream + separator przerwy
-      {
+      { 
         stationStringScroll = String(StationNrStr) + "." + stationName + ", " + stationNameStream + "      ";
       }
     }
     else //stationString != "" -> ma wartość
     {
-      processText(stationString);  // przetwarzamy polskie znaki
+      processText(stationString);  // przetwarzamy polsie znaki
       stationStringScroll = String(StationNrStr) + "." + stationName + ", " + stationString + "      ";
       Serial.println(stationStringScroll);
     }
-      Serial.print("debug -> Display1 (zegar) stationStringScroll: ");
+	  Serial.print("debug -> Display1 (zegar) stationStringScroll: ");
     Serial.println(stationStringScroll);
 
-    //Liczymy długość napisu stationStringScrollWidth
+    //Liczymy długość napisu stationStringScrollWidth 
     stationStringScrollWidth = stationStringScroll.length() * 6;
   }
   else if (displayMode == 2) // Tryb wświetlania mode 2 - 3 linijki tekstu
@@ -1371,17 +1435,17 @@ void displayRadio()
     if (stationString == "") // Jeżeli stationString jest pusty i stacja go nie nadaje
     {    
       if (stationNameStream == "") // jezeli nie ma równiez stationName
-      {
+      { 
         stationStringScroll = "---" ;
       } // wstawiamy trzy kreseczki do wyswietlenia
       else // jezeli jest station name to oprawiamy w "-- NAZWA --" i wysylamy do scrollera
-      {
+      { 
         stationStringScroll = ("-- " + stationNameStream + " --");
       }  // Zmienna stationStringScroller przyjmuje wartość stationNameStream
     }
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
-      processText(stationString);  // przetwarzamy polskie znaki
+      processText(stationString);  // przetwarzamy polsie znaki
       stationStringScroll = stationString;
     }
 
@@ -1399,7 +1463,7 @@ void displayRadio()
   }
 }
 
-void audio_info(const char *info)
+void audio_info(const char *info) 
 {
   // Wyświetl informacje w konsoli szeregowej
   Serial.print("info        ");
@@ -1407,7 +1471,7 @@ void audio_info(const char *info)
   // Znajdź pozycję "BitRate:" w tekście
   int bitrateIndex = String(info).indexOf("BitRate:");
   bitratePresent = false;
-  if (bitrateIndex != -1)
+  if (bitrateIndex != -1) 
   {
     // Przytnij tekst od pozycji "BitRate:" do końca linii
     bitrateString = String(info).substring(bitrateIndex + 8, String(info).indexOf('\n', bitrateIndex));
@@ -1417,7 +1481,7 @@ void audio_info(const char *info)
     bitratePresent = true;
 
     audioInfoRefresh = true;
- 
+  
   }
 
   // Znajdź pozycję "SampleRate:" w tekście
@@ -1439,7 +1503,6 @@ void audio_info(const char *info)
     flac = false;
     aac = false;
     vorbis = false;
-    opus = false;
   }
 
   if (String(info).indexOf("FLACDecoder") != -1) {
@@ -1447,7 +1510,6 @@ void audio_info(const char *info)
     mp3 = false;
     aac = false;
     vorbis = false;
-    opus = false;
   }
 
   if (String(info).indexOf("AACDecoder") != -1) {
@@ -1455,18 +1517,9 @@ void audio_info(const char *info)
     flac = false;
     mp3 = false;
     vorbis = false;
-    opus = false;
   }
   if (String(info).indexOf("VORBISDecoder") != -1) {
     vorbis = true;
-    aac = false;
-    flac = false;
-    mp3 = false;
-    opus = false;
-  }
-  if (String(info).indexOf("OPUSDecoder") != -1) {
-    opus = true;
-    vorbis = false;
     aac = false;
     flac = false;
     mp3 = false;
@@ -1496,7 +1549,7 @@ void audio_showstreamtitle(const char *info) {
   Serial.print("streamtitle ");
   Serial.println(info);
   stationString = String(info);
- 
+  
   ActionNeedUpdateTime = true;
   //if ((volumeSet == false) && (bankMenuEnable == false) && (listedStations == false) && (rcInputDigitsMenuEnable == false) && (equalizerMenuEnable == false))
   //if (displayActive == false)
@@ -1522,9 +1575,6 @@ void audio_eof_speech(const char *info) {
   Serial.println(info);
   if (resumePlay == true)
   {
-    delay(1000); // Opóźnienie, aby upewnić się, że kod został wysłany
-    ir_code = rcCmdOk; // Przypisujemy kod pilota - OK
-    delay(1000); // Opóźnienie, aby upewnić się, że kod został wysłany
     ir_code = rcCmdOk; // Przypisujemy kod pilota - OK
     bit_count = 32;
     calcNec();        // Przeliczamy kod pilota na pełny kod NEC
@@ -1565,18 +1615,18 @@ void bankMenuDisplay()
   u8g2.setFont(u8g2_font_fub14_tf);
   u8g2.drawStr(80, 33, "BANK ");
   u8g2.drawStr(145, 33, String(bank_nr).c_str());  // numer banku
-  if ((bankNetworkUpdate == true) || (noSPIFFScard == true))
+  if ((bankNetworkUpdate == true) || (noSDcard == true))
   {
     u8g2.setFont(spleen6x12PL);
     u8g2.drawStr(185, 24, "NETWORK ");
     u8g2.drawStr(188, 34, "UPDATE  ");
     
-    if (noSPIFFScard == true)
+    if (noSDcard == true)
     {
-      //u8g2.drawStr(24, 24, "NO SPIFFS");
+      //u8g2.drawStr(24, 24, "NO SD");
       u8g2.drawStr(24, 34, "NO CARD");
     }
- 
+  
   }
   //else
   //{
@@ -1586,7 +1636,7 @@ void bankMenuDisplay()
   u8g2.drawRFrame(21, 42, 214, 14, 3);                // Ramka do slidera bankow
   u8g2.drawRBox((bank_nr * 13) + 10, 44, 15, 10, 2);  // wypełnienie slidera
   u8g2.sendBuffer();
- 
+  
 }
 
 // =========== Funkcja do obsługi przycisków enkoderów, debouncing i długiego naciśnięcia ==============//
@@ -1625,7 +1675,7 @@ void handleButtons() {
         volumeSet = false;
       }
 
-      if (millis() - buttonPressTime2 >= buttonLongPressTime2 && millis() - buttonPressTime2 >= buttonSuperLongPressTime2 && action3Taken == false)
+      if (millis() - buttonPressTime2 >= buttonLongPressTime2 && millis() - buttonPressTime2 >= buttonSuperLongPressTime2 && action3Taken == false) 
       {
         //encoderFunctionOrderChange();
         
@@ -1652,8 +1702,8 @@ void handleButtons() {
         action2Taken = true;
       }
     }
-  }
-  else
+  } 
+  else 
   {
     isButton2Pressed = false;  // Resetujemy flagę naciśnięcia przycisku enkodera 2
     action2Taken = false;      // Resetujemy flagę akcji dla enkodera 2
@@ -1662,20 +1712,20 @@ void handleButtons() {
 }
 
 int maxSelection() {
-  //if (currentOption == INTERNET_RADIO)
+  //if (currentOption == INTERNET_RADIO) 
   //{
     return stationsCount - 1;
-  //}
+  //} 
   //return 0;  // Zwraca 0, jeśli żaden warunek nie jest spełniony
 }
 
 // Funkcja do przewijania w dół
-void scrollDown()
+void scrollDown() 
 {
-  if (currentSelection < maxSelection())
+  if (currentSelection < maxSelection()) 
   {
     currentSelection++;
-    if (currentSelection >= firstVisibleLine + maxVisibleLines)
+    if (currentSelection >= firstVisibleLine + maxVisibleLines) 
     {
       firstVisibleLine++;
     }
@@ -1693,10 +1743,10 @@ void scrollDown()
 
 // Funkcja do przewijania w górę
 void scrollUp() {
-  if (currentSelection > 0)
+  if (currentSelection > 0) 
   {
     currentSelection--;
-    if (currentSelection < firstVisibleLine)
+    if (currentSelection < firstVisibleLine) 
     {
       firstVisibleLine = currentSelection;
     }
@@ -1704,108 +1754,108 @@ void scrollUp() {
   else
   {
     // Jeśli osiągnięto wartość 0, przejdź do najwyższej wartości
-    currentSelection = maxSelection();
+    currentSelection = maxSelection(); 
     firstVisibleLine = currentSelection - maxVisibleLines + 1; // Ustaw pierwszą widoczną linię na najwyższą
   }
- 
+  
   Serial.print("Scroll Up: CurrentSelection = ");
   Serial.println(currentSelection);
 }
 
-void readVolumeFromSPIFFS()
+void readVolumeFromSD() 
 {
-  // Sprawdź, czy karta SPIFFS jest dostępna
-  if (!SPIFFS.begin(true))
+  // Sprawdź, czy karta SD jest dostępna
+  if (!SD.begin(SD_CS)) 
   {
-    Serial.println("Nie można znaleźć karty SPIFFS, ustawiam wartość Volume z EEPROMu.");
+    Serial.println("Nie można znaleźć karty SD, ustawiam wartość Volume z EEPROMu.");
     Serial.print("Wartość Volume: ");
     EEPROM.get(2, volumeValue);
     if (volumeValue > 21) {volumeValue = 10;} // zabezpiczenie przed pusta komorka EEPROM o wartosci FF (255)
     
     audio.setVolume(volumeValue);  // zakres 0...21
-    volumeBufferValue = volumeValue;
+    volumeBufferValue = volumeValue; 
     
     Serial.println(volumeValue);
     return;
   }
   // Sprawdź, czy plik volume.txt istnieje
-  if (SPIFFS.exists("/volume.txt"))
+  if (SD.exists("/volume.txt")) 
   {
-    myFile = SPIFFS.open("/volume.txt");
-    if (myFile)
+    myFile = SD.open("/volume.txt");
+    if (myFile) 
     {
       volumeValue = myFile.parseInt();
-        myFile.close();
+	    myFile.close();
       
-      Serial.println("Wczytano volume.txt z karty SPIFFS");
-      Serial.print("Wartość Volume odczytany z SPIFFS: ");
+      Serial.println("Wczytano volume.txt z karty SD");
+      Serial.print("Wartość Volume odczytany z SD: ");
       Serial.println(volumeValue);    
-    }
-      else
-      {
+    } 
+	  else 
+	  {
       Serial.println("Błąd podczas otwierania pliku volume.txt");
     }
-  }
-  else
+  } 
+  else 
   {
     Serial.println("Plik volume.txt nie istnieje.");
-      Serial.print("Wartość Volume domyślna:");
+	  Serial.print("Wartość Volume domyślna:");
     Serial.println(volumeValue);    
   }
   audio.setVolume(volumeValue);  // zakres 0...21
   volumeBufferValue = volumeValue;
 }
 
-void saveVolumeOnSPIFFS()
+void saveVolumeOnSD() 
 {
  /*
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
   u8g2.drawStr(1, 33, "Saving volume settings"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
- */
+ */ 
   volumeBufferValue = volumeValue;
- 
+  
   // Sprawdź, czy plik volume.txt istnieje
   Serial.print("Volume: ");
-  Serial.println(volumeValue);
- 
+  Serial.println(volumeValue); 
+  
   // Sprawdź, czy plik istnieje
-  if (SPIFFS.exists("/volume.txt"))
+  if (SD.exists("/volume.txt")) 
   {
     Serial.println("Plik volume.txt już istnieje.");
 
     // Otwórz plik do zapisu i nadpisz aktualną wartość flitrów equalizera
-    myFile = SPIFFS.open("/volume.txt", FILE_WRITE);
-    if (myFile)
-    {
+    myFile = SD.open("/volume.txt", FILE_WRITE);
+    if (myFile) 
+	{
       myFile.println(volumeValue);
-      myFile.close();
-      Serial.println("Aktualizacja volume.txt na karcie SPIFFS");
-    }
-    else
-    {
+	  myFile.close();
+      Serial.println("Aktualizacja volume.txt na karcie SD");
+    } 
+	else 
+	{
       Serial.println("Błąd podczas otwierania pliku volume.txt.");
     }
-  }
-  else
+  } 
+  else 
   {
     Serial.println("Plik volume.txt nie istnieje. Tworzenie...");
 
     // Utwórz plik i zapisz w nim aktualną wartość głośności
-    myFile = SPIFFS.open("/volume.txt", FILE_WRITE);
-    if (myFile)
-    {
+    myFile = SD.open("/volume.txt", FILE_WRITE);
+    if (myFile) 
+	{
       myFile.println(volumeValue);
       myFile.close();
-      Serial.println("Utworzono i zapisano volume.txt na karcie SPIFFS");
-    }
-    else
-    {
+      Serial.println("Utworzono i zapisano volume.txt na karcie SD");
+    } 
+	else 
+	{
       Serial.println("Błąd podczas tworzenia pliku volume.txt.");
      }
   }
-  if (noSPIFFScard == true) {EEPROM.write(2,volumeValue); EEPROM.commit();}
+  if (noSDcard == true) {EEPROM.write(2,volumeValue); EEPROM.commit();}
 }
 
 void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print)
@@ -1817,9 +1867,9 @@ void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print)
   int signalpwr = WiFi.RSSI();
   uint8_t signalLevel = 0;
     
- 
+  
   // Pionowe kreseczki, szerokosc 11px
- 
+  
   // Czyscimy obszar pod kreseczkami
   u8g2.setDrawColor(0);
   u8g2.drawBox(xpwr,ypwr-10,11,11);
@@ -1846,9 +1896,9 @@ void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print)
 
   if (print == true) // Jesli flaga print =1 to wypisujemy na serialu sile sygnału w % i w skali 1-6
   {
-    for (int j = 0; j < 100; j++)
+    for (int j = 0; j < 100; j++) 
     {
-      if (signal_dBM[j] == signalpwr)
+      if (signal_dBM[j] == signalpwr) 
       {
         Serial.print("Sygnału WiFi: ");
         Serial.print(signal_percent[j]);
@@ -1878,13 +1928,13 @@ void rcInputKey(uint8_t i)
   {
     timeDisplay = false;
     displayActive = true;
-    displayStartTime = millis();
+    displayStartTime = millis(); 
     
     if (rcInputDigit1 == 0xFF)
     {
       rcInputDigit1 = i;
     }
-    else
+    else 
     {
       rcInputDigit2 = i;
     }
@@ -1892,13 +1942,13 @@ void rcInputKey(uint8_t i)
     int y = 35;
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
-    u8g2.drawStr(65, y, "Station:");
+    u8g2.drawStr(65, y, "Station:"); 
     if (rcInputDigit1 != 0xFF)
-    {u8g2.drawStr(153, y, String(rcInputDigit1).c_str());}
+    {u8g2.drawStr(153, y, String(rcInputDigit1).c_str());} 
     else {u8g2.drawStr(153, x,"_" ); }
     
     if (rcInputDigit2 != 0xFF)
-    {u8g2.drawStr(164, y, String(rcInputDigit2).c_str());}
+    {u8g2.drawStr(164, y, String(rcInputDigit2).c_str());} 
     else {u8g2.drawStr(164, y,"_" ); }
 
 
@@ -1908,7 +1958,7 @@ void rcInputKey(uint8_t i)
       station_nr = (rcInputDigit1 *10) + rcInputDigit2;
     }
     else if ((rcInputDigit1 != 0xFF) && (rcInputDigit2 == 0xFF))  // jezeli tylko podalismy jedna cyfrę
-    {
+    { 
       station_nr = rcInputDigit1;
     }
 
@@ -1948,8 +1998,8 @@ void rcInputKey(uint8_t i)
   }  
 }
 
-// Funkcja do zapisywania numeru stacji i numeru banku na karcie SPIFFS
-void saveStationOnSPIFFS() {
+// Funkcja do zapisywania numeru stacji i numeru banku na karcie SD
+void saveStationOnSD() {
   // Sprawdź, czy plik station_nr.txt istnieje
 
   Serial.print("Zapisujemy bank: ");
@@ -1958,15 +2008,15 @@ void saveStationOnSPIFFS() {
   Serial.println(station_nr);
 
   // Sprawdź, czy plik station_nr.txt istnieje
-  if (SPIFFS.exists("/station_nr.txt")) {
+  if (SD.exists("/station_nr.txt")) {
     Serial.println("Plik station_nr.txt już istnieje.");
 
     // Otwórz plik do zapisu i nadpisz aktualną wartość station_nr
-    myFile = SPIFFS.open("/station_nr.txt", FILE_WRITE);
+    myFile = SD.open("/station_nr.txt", FILE_WRITE);
     if (myFile) {
       myFile.println(station_nr);
       myFile.close();
-      Serial.println("Aktualizacja station_nr.txt na karcie SPIFFS");
+      Serial.println("Aktualizacja station_nr.txt na karcie SD");
     } else {
       Serial.println("Błąd podczas otwierania pliku station_nr.txt.");
     }
@@ -1974,26 +2024,26 @@ void saveStationOnSPIFFS() {
     Serial.println("Plik station_nr.txt nie istnieje. Tworzenie...");
 
     // Utwórz plik i zapisz w nim aktualną wartość station_nr
-    myFile = SPIFFS.open("/station_nr.txt", FILE_WRITE);
+    myFile = SD.open("/station_nr.txt", FILE_WRITE);
     if (myFile) {
       myFile.println(station_nr);
       myFile.close();
-      Serial.println("Utworzono i zapisano station_nr.txt na karcie SPIFFS");
+      Serial.println("Utworzono i zapisano station_nr.txt na karcie SD");
     } else {
       Serial.println("Błąd podczas tworzenia pliku station_nr.txt.");
     }
   }
 
   // Sprawdź, czy plik bank_nr.txt istnieje
-  if (SPIFFS.exists("/bank_nr.txt")) {
+  if (SD.exists("/bank_nr.txt")) {
     Serial.println("Plik bank_nr.txt już istnieje.");
 
     // Otwórz plik do zapisu i nadpisz aktualną wartość bank_nr
-    myFile = SPIFFS.open("/bank_nr.txt", FILE_WRITE);
+    myFile = SD.open("/bank_nr.txt", FILE_WRITE);
     if (myFile) {
       myFile.println(bank_nr);
       myFile.close();
-      Serial.println("Aktualizacja bank_nr.txt na karcie SPIFFS.");
+      Serial.println("Aktualizacja bank_nr.txt na karcie SD.");
     } else {
       Serial.println("Błąd podczas otwierania pliku bank_nr.txt.");
     }
@@ -2001,19 +2051,19 @@ void saveStationOnSPIFFS() {
     Serial.println("Plik bank_nr.txt nie istnieje. Tworzenie...");
 
     // Utwórz plik i zapisz w nim aktualną wartość bank_nr
-    myFile = SPIFFS.open("/bank_nr.txt", FILE_WRITE);
+    myFile = SD.open("/bank_nr.txt", FILE_WRITE);
     if (myFile) {
       myFile.println(bank_nr);
       myFile.close();
-      Serial.println("Utworzono i zapisano bank_nr.txt na karcie SPIFFS");
+      Serial.println("Utworzono i zapisano bank_nr.txt na karcie SD");
     } else {
       Serial.println("Błąd podczas tworzenia pliku bank_nr.txt.");
     }
   }
- 
-  if (noSPIFFScard == true)
+  
+  if (noSDcard == true)
   {
-    Serial.println("Brak karty SPIFFS zapisujemy do EEPROM");
+    Serial.println("Brak karty SD zapisujemy do EEPROM");
     EEPROM.write(0, station_nr);
     EEPROM.write(1, bank_nr);
     EEPROM.commit();
@@ -2022,14 +2072,14 @@ void saveStationOnSPIFFS() {
 
 
 // Funkcja odpowiedzialna za zmianę aktualnie wybranej stacji radiowej.
-void changeStation2()
+void changeStation2() 
 {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
-  mp3 = flac = aac = vorbis = opus = false;
+  mp3 = flac = aac = vorbis = false;
   stationFromBuffer = station_nr;
   stationString.remove(0);  // Usunięcie wszystkich znaków z obiektu stationString
   stationNameStream.remove(0);
@@ -2038,13 +2088,13 @@ void changeStation2()
   String fileName = String("/bank") + (bank_nr < 10 ? "0" : "") + String(bank_nr) + ".txt";
 
   // Sprawdzamy, czy plik istnieje
-  if (!SPIFFS.exists(fileName)) {
+  if (!SD.exists(fileName)) {
     Serial.println("Błąd: Plik banku nie istnieje.");
     return;
   }
 
   // Otwieramy plik w trybie do odczytu
-  File bankFile = SPIFFS.open(fileName, FILE_READ);
+  File bankFile = SD.open(fileName, FILE_READ);
   if (!bankFile)  // jesli brak pliku to...
   {
     Serial.println("Błąd: Nie można otworzyć pliku banku.");
@@ -2058,7 +2108,7 @@ void changeStation2()
     String line = bankFile.readStringUntil('\n');
     currentLine++;
 
-    if (currentLine == station_nr)
+    if (currentLine == station_nr) 
     {
       // Wyciągnij pierwsze 42 znaki i przypisz do stationName
       stationName = line.substring(0, 41);  //42 Skopiuj pierwsze 42 znaki z linii
@@ -2098,14 +2148,14 @@ void changeStation2()
     //seconds = 0;
     stationFromBuffer = station_nr;
     bankFromBuffer = bank_nr;
-    saveStationOnSPIFFS();
+    saveStationOnSD();
   } else {
     Serial.println("Błąd: link stacji nie zawiera 'http' lub 'https'");
     Serial.println("Odczytany URL: " + stationUrl);
   }
   currentSelection = station_nr - 1; // ustawiamy stacje na liscie na obecnie odtwarzaczną po zmianie stacji
   firstVisibleLine = currentSelection + 1; // pierwsza widoczna lina to grająca stacja przy starcie
-  if (currentSelection + 1 >= stationsCount - 1)
+  if (currentSelection + 1 >= stationsCount - 1) 
   {
    firstVisibleLine = currentSelection - 3;
   }
@@ -2114,7 +2164,7 @@ void changeStation2()
   //screenRefreshTime = millis();
 }
 
-void changeStation()
+void changeStation() 
 {
   fwupd = false;
   u8g2.clearBuffer();
@@ -2122,7 +2172,7 @@ void changeStation()
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
-  mp3 = flac = aac = vorbis = opus = false;
+  mp3 = flac = aac = vorbis = false;
   stationFromBuffer = station_nr;
   stationString.remove(0);  // Usunięcie wszystkich znaków z obiektu stationString
   stationNameStream.remove(0);
@@ -2136,18 +2186,18 @@ void changeStation()
   memset(station, 0, sizeof(station));    // Wyczyszczenie tablicy zerami przed zapisaniem danych
   int length = psramData[(station_nr - 1) * (STATION_NAME_LENGTH + 1)];   // Odczytaj długość nazwy stacji z PSRAM dla bieżącego indeksu stacji
       
-  for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++)
+  for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++) 
   { // Odczytaj nazwę stacji z PSRAM jako ciąg bajtów, maksymalnie do STATION_NAME_LENGTH
     station[j] = psramData[(station_nr - 1) * (STATION_NAME_LENGTH + 1) + 1 + j];  // Odczytaj znak po znaku nazwę stacji
   }
- 
+  
   //Serial.println("-------- GRAMY OBECNIE ---------- ");
   //Serial.print(station_nr - 1);
   //Serial.print(" ");
   //Serial.println(String(station));
 
   String line = String(station); // Przypisujemy dane odczytane z PSRAM do zmiennej line
- 
+  
   // Wyciągnij pierwsze 42 znaki i przypisz do stationName
   stationName = line.substring(0, 41);  //42 Skopiuj pierwsze 42 znaki z linii
   Serial.print("Nazwa stacji: ");
@@ -2155,27 +2205,27 @@ void changeStation()
 
   // Znajdź część URL w linii, np. po numerze stacji
   int urlStart = line.indexOf("http");  // Szukamy miejsca, gdzie zaczyna się URL
-  if (urlStart != -1)
+  if (urlStart != -1) 
   {
     stationUrl = line.substring(urlStart);  // Wyciągamy URL od "http"
     stationUrl.trim();                      // Usuwamy białe znaki na początku i końcu
   }
   else
   {
-    return;
+	return;
   }
- 
+  
   if (stationUrl.isEmpty()) // jezeli link URL jest pusty
   {
     Serial.println("Błąd: Nie znaleziono stacji dla podanego numeru.");
     return;
   }
- 
+  
   //Serial.print("URL: ");
   //Serial.println(stationUrl);
 
   // Weryfikacja, czy w linku znajduje się "http" lub "https"
-  if (stationUrl.startsWith("http://") || stationUrl.startsWith("https://"))
+  if (stationUrl.startsWith("http://") || stationUrl.startsWith("https://")) 
   {
     // Wydrukuj nazwę stacji i link na serialu
     Serial.print("Aktualnie wybrana stacja: ");
@@ -2191,17 +2241,17 @@ void changeStation()
     audio.connecttohost(stationUrl.c_str());
     stationFromBuffer = station_nr;
     bankFromBuffer = bank_nr;
- 
-    saveStationOnSPIFFS(); // Zapisujemy jaki numer stacji i który bank gramy
-  }
-  else
+  
+    saveStationOnSD(); // Zapisujemy jaki numer stacji i który bank gramy
+  } 
+  else 
   {
     Serial.println("Błąd: link stacji nie zawiera 'http' lub 'https'");
     Serial.println("Odczytany URL: " + stationUrl);
   }
   currentSelection = station_nr - 1; // ustawiamy stacje na liscie na obecnie odtwarzaczną po zmianie stacji
   firstVisibleLine = currentSelection + 1; // pierwsza widoczna lina to grająca stacja przy starcie
-  if (currentSelection + 1 >= stationsCount - 1)
+  if (currentSelection + 1 >= stationsCount - 1) 
   {
    firstVisibleLine = currentSelection - 3;
   }
@@ -2209,7 +2259,7 @@ void changeStation()
 }
 
 // Funkcja do wyświetlania listy stacji radiowych z opcją wyboru poprzez zaznaczanie w negatywie
-void displayStations()
+void displayStations() 
 {
   listedStations = true;
   u8g2.clearBuffer();  // Wyczyść bufor przed rysowaniem, aby przygotować ekran do nowej zawartości
@@ -2219,12 +2269,12 @@ void displayStations()
   u8g2.print(String(station_nr) + " / " + String(stationsCount));  // Dodaj numer aktualnej stacji i licznik wszystkich stacji
 
   int displayRow = 1;  // Zmienna dla numeru wiersza, zaczynając od drugiego (pierwszy to nagłówek)
- 
+  
   //erial.print("FirstVisibleLine:");
   //Serial.print(firstVisibleLine);
 
   // Wyświetlanie stacji, zaczynając od drugiej linii (y=21)
-  for (int i = firstVisibleLine; i < min(firstVisibleLine + maxVisibleLines, stationsCount); i++)
+  for (int i = firstVisibleLine; i < min(firstVisibleLine + maxVisibleLines, stationsCount); i++) 
   {
     char station[STATION_NAME_LENGTH + 1];  // Tablica na nazwę stacji o maksymalnej długości zdefiniowanej przez STATION_NAME_LENGTH
     memset(station, 0, sizeof(station));    // Wyczyszczenie tablicy zerami przed zapisaniem danych
@@ -2233,13 +2283,13 @@ void displayStations()
     int length = psramData[i * (STATION_NAME_LENGTH + 1)];  //----------------------------------------------
 
     // Odczytaj nazwę stacji z PSRAM jako ciąg bajtów, maksymalnie do STATION_NAME_LENGTH
-    for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++)
+    for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++) 
     {
       station[j] = psramData[i * (STATION_NAME_LENGTH + 1) + 1 + j];  // Odczytaj znak po znaku nazwę stacji
     }
 
     // Sprawdź, czy bieżąca stacja to ta, która jest aktualnie zaznaczona
-    if (i == currentSelection)
+    if (i == currentSelection) 
     {
       u8g2.setDrawColor(1);                           // Ustaw biały kolor rysowania
       u8g2.drawBox(0, displayRow * 13 - 2, 256, 13);  // Narysuj prostokąt jako tło dla zaznaczonej stacji (x=0, szerokość 256, wysokość 10)
@@ -2259,7 +2309,7 @@ void displayStations()
   u8g2.sendBuffer();     // Wyślij zawartość bufora do ekranu OLED, aby wyświetlić zmiany
 }
 
-void updateTimerFlag()
+void updateTimerFlag() 
 {
   ActionNeedUpdateTime = true;
 }
@@ -2273,7 +2323,7 @@ void displayPowerSave(bool saveON)
 
 
 // Funkcja wywoływana co sekundę przez timer do aktualizacji czasu na wyświetlaczu
-void updateTimer()
+void updateTimer() 
 {
    // Wypełnij spacjami, aby wyczyścić pole
   //u8g2.drawStr(208, 63, "         "); // czyszczenie pola zegara
@@ -2289,7 +2339,7 @@ void updateTimer()
 
   u8g2.setDrawColor(1);  // Ustaw kolor na biały
 
-  if (timeDisplay == true)
+  if (timeDisplay == true) 
   {
     if ((audio.isRunning() == true) && (displayMode == 0) || (displayMode == 2)) {
       if (mp3 == true) {
@@ -2305,12 +2355,8 @@ void updateTimer()
         //Serial.println("Gram AAC");
       }
       if (vorbis == true) {
-        u8g2.drawStr(133, 63, "VRB");
-        //Serial.println("Gram VORBIS");
-      }
-      if (opus == true) {
-        u8g2.drawStr(133, 63, "OPS");
-        //Serial.println("Gram OPUS");
+        u8g2.drawStr(133, 63, "VBR");
+        //Serial.println("Gram AAC");
       }
     }
     /*
@@ -2323,7 +2369,7 @@ void updateTimer()
     }
     */
 
-    //if ((currentOption == INTERNET_RADIO) && ((mp3 == true) || (flac == true) || (aac == true) || (vorbis == true)))
+    //if ((currentOption == INTERNET_RADIO) && ((mp3 == true) || (flac == true) || (aac == true) || (vorbis == true))) 
     //if ((currentOption == INTERNET_RADIO) && (timeDisplay == true) && (audio.isRunning() == true))
     if ((timeDisplay == true) && (audio.isRunning() == true))
     {
@@ -2331,7 +2377,7 @@ void updateTimer()
       struct tm timeinfo;
 
       // Sprawdź, czy udało się pobrać czas z lokalnego zegara czasu rzeczywistego
-      if (!getLocalTime(&timeinfo, 5))
+      if (!getLocalTime(&timeinfo, 5)) 
       {
         // Wyświetl komunikat o niepowodzeniu w pobieraniu czasu
         Serial.println("Nie udało się uzyskać czasu");
@@ -2345,7 +2391,7 @@ void updateTimer()
       if ((timeinfo.tm_min == 0) && (timeinfo.tm_sec == 0) && (timeVoiceInfoEveryHour == true)) {voiceTimePlay = true; }
 
       if ((displayMode == 0) || (displayMode == 2))
-      {
+      { 
         snprintf(timeString, sizeof(timeString), "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
         u8g2.setFont(spleen6x12PL);
         u8g2.drawStr(208, 63, timeString);
@@ -2407,10 +2453,10 @@ void updateTimer()
     }
     else if ((timeDisplay == true) && (audio.isRunning() == false))
     {
-      displayPowerSave(0);
+      displayPowerSave(0); 
       // Struktura przechowująca informacje o czasie
       struct tm timeinfo;
-      if (!getLocalTime(&timeinfo, 5))
+      if (!getLocalTime(&timeinfo, 5)) 
       {
         Serial.println("Nie udało się uzyskać czasu");
         return;  // Zakończ funkcję, gdy nie udało się uzyskać czasu
@@ -2435,126 +2481,126 @@ void updateTimer()
   }
 }
 
-void saveEqualizerOnSPIFFS()
+void saveEqualizerOnSD() 
 {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
   u8g2.drawStr(1, 33, "Saving equalizer settings"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
- 
- 
+  
+  
   // Sprawdź, czy plik equalizer.txt istnieje
 
   Serial.print("Filtr High: ");
   Serial.println(toneHiValue);
- 
+  
   Serial.print("Filtr Mid: ");
   Serial.println(toneMidValue);
- 
+  
   Serial.print("Filtr Low: ");
   Serial.println(toneLowValue);
- 
- 
+  
+  
   // Sprawdź, czy plik istnieje
-  if (SPIFFS.exists("/equalizer.txt"))
+  if (SD.exists("/equalizer.txt")) 
   {
     Serial.println("Plik equalizer.txt już istnieje.");
 
     // Otwórz plik do zapisu i nadpisz aktualną wartość flitrów equalizera
-    myFile = SPIFFS.open("/equalizer.txt", FILE_WRITE);
-    if (myFile)
-      {
+    myFile = SD.open("/equalizer.txt", FILE_WRITE);
+    if (myFile) 
+	  {
       myFile.println(toneHiValue);
-        myFile.println(toneMidValue);
-        myFile.println(toneLowValue);
+	    myFile.println(toneMidValue);
+	    myFile.println(toneLowValue);
       myFile.close();
-      Serial.println("Aktualizacja equalizer.txt na karcie SPIFFS");
-    }
-      else
-      {
+      Serial.println("Aktualizacja equalizer.txt na karcie SD");
+    } 
+	  else 
+	  {
       Serial.println("Błąd podczas otwierania pliku equalizer.txt.");
     }
-  }
-  else
+  } 
+  else 
   {
     Serial.println("Plik equalizer.txt nie istnieje. Tworzenie...");
 
     // Utwórz plik i zapisz w nim aktualną wartość filtrów equalizera
-    myFile = SPIFFS.open("/equalizer.txt", FILE_WRITE);
-    if (myFile)
-      {
+    myFile = SD.open("/equalizer.txt", FILE_WRITE);
+    if (myFile) 
+	  {
       myFile.println(toneHiValue);
-        myFile.println(toneMidValue);
-        myFile.println(toneLowValue);
+	    myFile.println(toneMidValue);
+	    myFile.println(toneLowValue);
       myFile.close();
-      Serial.println("Utworzono i zapisano equalizer.txt na karcie SPIFFS");
-    }
-      else
-      {
+      Serial.println("Utworzono i zapisano equalizer.txt na karcie SD");
+    } 
+	  else 
+	  {
       Serial.println("Błąd podczas tworzenia pliku equalizer.txt.");
     }
   }
 }
 
-void readEqualizerFromSPIFFS()
+void readEqualizerFromSD() 
 {
-  // Sprawdź, czy karta SPIFFS jest dostępna
-  if (!SPIFFS.begin(true))
+  // Sprawdź, czy karta SD jest dostępna
+  if (!SD.begin(SD_CS)) 
   {
-    Serial.println("Nie można znaleźć karty SPIFFS, ustawiam domyślne wartości filtrow Equalziera.");
-    toneHiValue = 0;  // Domyślna wartość filtra gdy brak karty SPIFFS
-      toneMidValue = 0; // Domyślna wartość filtra gdy brak karty SPIFFS
-      toneLowValue = 0; // Domyślna wartość filtra gdy brak karty SPIFFS
+    Serial.println("Nie można znaleźć karty SD, ustawiam domyślne wartości filtrow Equalziera.");
+    toneHiValue = 0;  // Domyślna wartość filtra gdy brak karty SD
+	  toneMidValue = 0; // Domyślna wartość filtra gdy brak karty SD
+	  toneLowValue = 0; // Domyślna wartość filtra gdy brak karty SD
     return;
   }
 
   // Sprawdź, czy plik equalizer.txt istnieje
-  if (SPIFFS.exists("/equalizer.txt"))
+  if (SD.exists("/equalizer.txt")) 
   {
-    myFile = SPIFFS.open("/equalizer.txt");
-    if (myFile)
+    myFile = SD.open("/equalizer.txt");
+    if (myFile) 
     {
       toneHiValue = myFile.parseInt();
-        toneMidValue = myFile.parseInt();
-        toneLowValue = myFile.parseInt();
+	    toneMidValue = myFile.parseInt();
+	    toneLowValue = myFile.parseInt();
       myFile.close();
       
-      Serial.println("Wczytano equalizer.txt z karty SPIFFS: ");
-      
-      Serial.print("Filtr High equalizera odczytany z SPIFFS: ");
+      Serial.println("Wczytano equalizer.txt z karty SD: ");
+	  
+      Serial.print("Filtr High equalizera odczytany z SD: ");
       Serial.println(toneHiValue);
     
-      Serial.print("Filtr Mid equalizera odczytany z SPIFFS: ");
+      Serial.print("Filtr Mid equalizera odczytany z SD: ");
       Serial.println(toneMidValue);
     
-      Serial.print("Filtr Low equalizera odczytany z SPIFFS: ");
+      Serial.print("Filtr Low equalizera odczytany z SD: ");
       Serial.println(toneLowValue);
+	  
       
-      
-    }
-      else
-      {
+    } 
+	  else 
+	  {
       Serial.println("Błąd podczas otwierania pliku equalizer.txt.");
     }
-  }
-  else
+  } 
+  else 
   {
     Serial.println("Plik equalizer.txt nie istnieje.");
-    toneHiValue = 0;  // Domyślna wartość filtra gdy brak karty SPIFFS
-      toneMidValue = 0; // Domyślna wartość filtra gdy brak karty SPIFFS
-      toneLowValue = 0; // Domyślna wartość filtra gdy brak karty SPIFFS
+    toneHiValue = 0;  // Domyślna wartość filtra gdy brak karty SD
+	  toneMidValue = 0; // Domyślna wartość filtra gdy brak karty SD
+	  toneLowValue = 0; // Domyślna wartość filtra gdy brak karty SD
   }
   audio.setTone(toneLowValue, toneMidValue, toneHiValue); // Ustawiamy filtry - zakres regulacji -40 + 6dB jako int8_t ze znakiem
 }
 
-// Funkcja do odczytu danych stacji radiowej z karty SPIFFS
-void readStationFromSPIFFS() {
-  // Sprawdź, czy karta SPIFFS jest dostępna
-  if (!SPIFFS.begin(true)) {
-    Serial.println("Nie można znaleźć karty SPIFFS. Ustawiam domyślne wartości: Station=1, Bank=1.");
-    //Serial.println("Nie można znaleźć karty SPIFFS, ustawiam wartości z EEPROMu");
-    //station_nr = 1;  // Domyślny numer stacji gdy brak karty SPIFFS
-    //bank_nr = 1;     // Domyślny numer banku gdy brak karty SPIFFS
+// Funkcja do odczytu danych stacji radiowej z karty SD
+void readStationFromSD() {
+  // Sprawdź, czy karta SD jest dostępna
+  if (!SD.begin(SD_CS)) {
+    //Serial.println("Nie można znaleźć karty SD. Ustawiam domyślne wartości: Station=1, Bank=1.");
+    Serial.println("Nie można znaleźć karty SD, ustawiam wartości z EEPROMu");
+    //station_nr = 1;  // Domyślny numer stacji gdy brak karty SD
+    //bank_nr = 1;     // Domyślny numer banku gdy brak karty SD
     EEPROM.get(0, station_nr);
     EEPROM.get(1, bank_nr);
     
@@ -2570,12 +2616,12 @@ void readStationFromSPIFFS() {
   }
 
   // Sprawdź, czy plik station_nr.txt istnieje
-  if (SPIFFS.exists("/station_nr.txt")) {
-    myFile = SPIFFS.open("/station_nr.txt");
+  if (SD.exists("/station_nr.txt")) {
+    myFile = SD.open("/station_nr.txt");
     if (myFile) {
       station_nr = myFile.parseInt();
       myFile.close();
-      Serial.print("Wczytano station_nr z karty SPIFFS: ");
+      Serial.print("Wczytano station_nr z karty SD: ");
       Serial.println(station_nr);
     } else {
       Serial.println("Błąd podczas otwierania pliku station_nr.txt.");
@@ -2586,12 +2632,12 @@ void readStationFromSPIFFS() {
   }
 
   // Sprawdź, czy plik bank_nr.txt istnieje
-  if (SPIFFS.exists("/bank_nr.txt")) {
-    myFile = SPIFFS.open("/bank_nr.txt");
+  if (SD.exists("/bank_nr.txt")) {
+    myFile = SD.open("/bank_nr.txt");
     if (myFile) {
       bank_nr = myFile.parseInt();
       myFile.close();
-      Serial.print("Wczytano bank_nr z karty SPIFFS: ");
+      Serial.print("Wczytano bank_nr z karty SD: ");
       Serial.println(bank_nr);
     } else {
       Serial.println("Błąd podczas otwierania pliku bank_nr.txt.");
@@ -2602,7 +2648,7 @@ void readStationFromSPIFFS() {
   }
 }
 
-void vuMeter()
+void vuMeter() 
 {
   vuMeterR = min(audio.getVUlevel() & 0xFF, 250);  // wyciagamy ze zmiennej typu int16 kanał L
   vuMeterL = min(audio.getVUlevel() >> 8, 250);  // z wyzszej polowki wyciagamy kanal P
@@ -2623,15 +2669,15 @@ void vuMeter()
     u8g2.setDrawColor(1);
     u8g2.drawBox(0, 41, vuMeterL, 3);  // rysujemy kreseczki o dlugosci odpowiadajacej wartosci VU
     u8g2.drawBox(0, 46, vuMeterR, 3);
-    }
+    } 
     else  // vuMeterMode == 0  tryb podstawowy, kreseczki z przerwami
     {
-    for (uint8_t vusize = 0; vusize < vuMeterL; vusize++)
+    for (uint8_t vusize = 0; vusize < vuMeterL; vusize++) 
     {
       u8g2.drawBox(vusize, 41, 8, 2);
       vusize = vusize + 8;
     }
-    for (uint8_t vusize = 0; vusize < vuMeterR; vusize++)
+    for (uint8_t vusize = 0; vusize < vuMeterR; vusize++) 
     {
       u8g2.drawBox(vusize, 46, 8, 2);
       vusize = vusize + 8;
@@ -2647,7 +2693,7 @@ void displayRadioScroller() // Funkcja odpwoiedzialna za przewijanie informacji 
   if (displayMode == 0) // Tryb normalny - radio
   {
 
-    if (stationStringScroll.length() > 42)
+    if (stationStringScroll.length() > 42) 
     {
 
       xPositionStationString = offset;
@@ -2670,7 +2716,7 @@ void displayRadioScroller() // Funkcja odpwoiedzialna za przewijanie informacji 
       u8g2.drawStr(xPositionStationString, 33, stationStringScroll.c_str());
       
     }
-  }
+  } 
   else if (displayMode == 1)  // Tryb zegara
   {
     if (stationStringScroll.length() > 42) {
@@ -2689,8 +2735,8 @@ void displayRadioScroller() // Funkcja odpwoiedzialna za przewijanie informacji 
         offset = 0;
       }
 
-    }
-    else
+    } 
+    else 
     {
       xPositionStationString = 0;
       u8g2.setDrawColor(1);
@@ -2764,23 +2810,23 @@ void handleKeyboard()
   // vTaskDelay(50);
   //int keyboardValue = analogRead(keyboardPin); // Odczyt wartości analogowej przycisku
   uint8_t key = 17;
- 
- 
+  
+  
   for (int i = 0; i < 32; i++)
   {
     keyboardValue = keyboardValue + analogRead(keyboardPin);
   }
   keyboardValue = keyboardValue / 32;  
- 
+  
 
-  if (debugKeyboard == 1)
-  {
+  if (debugKeyboard == 1) 
+  { 
     displayActive = true;
     displayStartTime = millis();
     u8g2.clearBuffer();
     u8g2.setCursor(10,10); u8g2.print("ADC:   " + String(keyboardValue));
     u8g2.setCursor(10,23); u8g2.print("BUTTON:" + String(keyboardButtonPressed));
-    u8g2.sendBuffer();
+    u8g2.sendBuffer(); 
     Serial.print("debug - ADC odczyt: ");
     Serial.print(keyboardValue);
     Serial.print(" flaga przycisk wcisniety:");
@@ -2858,7 +2904,7 @@ void handleKeyboard()
         else if ((debugKeyboard == false) && (key == 11)) // Przycisk Memory wywyłuje menu wyboru Banku
         { bankMenuDisplay();}
         else if ((debugKeyboard == false) && (key == 12)) // Przycisk Shift zatwierdza zmiane stacji, banku, działa jak "OK" na pilocie
-        {
+        { 
          ir_code = rcCmdOk; // Przycisk Auto TUning udaje OK
           bit_count = 32;
           calcNec();  // przeliczamy kod pilota na kod oryginalny pełen kod NEC
@@ -2869,12 +2915,12 @@ void handleKeyboard()
          //   fetchStationsFromServer();
          //   bankMenuEnable = false;
          // }
-         // changeStation();
+         // changeStation(); 
          // displayRadio();
          // u8g2.sendBuffer();
         }
         else if ((debugKeyboard == false) && (key == 13)) // Przycisk Auto - przełaczanie tryb Zegar/Radio
-        {
+        { 
           ir_code = rcCmdSrc; // Przycisk Auto TUning udaje Src
           bit_count = 32;
           calcNec();  // przeliczamy kod pilota na kod oryginalny pełen kod NEC
@@ -2886,13 +2932,13 @@ void handleKeyboard()
           calcNec();  // przeliczamy kod pilota na kod oryginalny pełen kod NEC
         }
         else if ((debugKeyboard == false) && (key == 15)) // Przycisk Mute
-        {
+        { 
           ir_code = rcCmdMute; // Przypisujemy kod polecenia z pilota
-          bit_count = 32; // ustawiamy informacje, ze mamy pelen kod NEC do analizy
+          bit_count = 32; // ustawiamy informacje, ze mamy pelen kod NEC do analizy 
           calcNec();  // przeliczamy kod pilota na kod oryginalny pełen kod NEC     
         }
         else if ((debugKeyboard == false) && (key == 16)) // Przycisk Memory Scan - zmiana janości wyswietlacza - funkcja "Dimmer"
-        {
+        { 
           ir_code = rcCmdDirect; // Udajemy komendy pilota
           bit_count = 32;
           calcNec();  // przeliczamy kod pilota na kod oryginalny pełen kod NEC
@@ -2902,7 +2948,7 @@ void handleKeyboard()
         key=17; // Reset "KEY" do pozycji poza zakresem klawiatury
       }
     }
-  }
+  } 
   //  }
   // vTaskDelete(NULL);
 }
@@ -2941,7 +2987,7 @@ void volumeUp()
   displayStartTime = millis();   
   volumeValue++;
 
-  if (volumeValue > 21)
+  if (volumeValue > 21) 
   {
     volumeValue = 21;
   }
@@ -2968,10 +3014,10 @@ void volumeDown()
   volumeMute = false;
   displayStartTime = millis();
   volumeValue--;
-  if (volumeValue < 1)
+  if (volumeValue < 1) 
   {
     volumeValue = 1;
-  }
+  } 
   Serial.print("Wartość głośności: ");
   Serial.println(volumeValue);
   audio.setVolume(volumeValue);  // zakres 0...21
@@ -3023,7 +3069,7 @@ void IRAM_ATTR pulseISR()
   if (pulse_ready_low) // spradzamy czy jest stan niski przez 9ms - start ramki
   {
     pulse_duration_low = pulse_end_low - pulse_start_low;
- 
+  
     if (pulse_duration_low > (LEAD_HIGH - TOLERANCE) && pulse_duration_low < (LEAD_HIGH + TOLERANCE))
     {
       pulse_duration_9ms = pulse_duration_low; // przypisz czas trwania puslu Low do zmiennej puls 9ms
@@ -3091,7 +3137,7 @@ void IRAM_ATTR pulseISR()
         }
         else
         {
-          ir_code = 0;
+          ir_code = 0; 
           data_start_detected = false;
           //bit_count = 0;        
         }
@@ -3109,7 +3155,7 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
   equalizerMenuEnable = true;   // Ustawiamy flage menu equalizera
   timeDisplay = false;          // Wyłaczamy zegar
   displayActive = true;         // Wyswietlacz aktywny
- 
+  
   Serial.println("--Equalizer--");
   Serial.print("Wartość tonów Niskich/Low:   ");
   Serial.println(toneLowValue);
@@ -3130,32 +3176,31 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
   //u8g2.print("P1    P2    P3    P4");
   uint8_t xTone;
   uint8_t yTone;  
- 
+  
   // ---- Tony Wysokie ----
-  xTone=0;
+  xTone=0; 
   yTone=28;
   u8g2.setCursor(xTone,yTone);
-  if (toneHiValue >= 10) {u8g2.print("High: " + String(toneHiValue) + "dB");}  // piszemy o 1 znak wczesniej
-  if ((toneHiValue >= 0) && (toneHiValue <= 9)) {u8g2.print("High:  " + String(toneHiValue) + "dB");}  // piszemy o 2 znak wczesniej
-  if ((toneHiValue < 0) && (toneHiValue >= -9)) {u8g2.print("High: " + String(toneHiValue) + "dB");}    // piszemy o 1 znak wczesniej
-  if (toneHiValue <= -10) {u8g2.print("High:" + String(toneHiValue) + "dB");}  // piszemy normalnie
- 
+  if (toneHiValue >= 0) {u8g2.print("High:  " + String(toneHiValue) + "dB");}  // Dla wartosci dodatnich piszemy normalnie
+  if ((toneHiValue < 0) && (toneHiValue >= -9)) {u8g2.print("High: " + String(toneHiValue) + "dB");}    // Dla wartosci ujemnych piszemy o 1 znak wczesniej
+  if ((toneHiValue < 0) && (toneHiValue < -9)) {u8g2.print("High:" + String(toneHiValue) + "dB");}    // Dla wartosci ujemnych ponizej -9 piszemy o 2 znak wczesniej
+  
   xTone=20;
-  if (toneSelect == 1)
-  {
+  if (toneSelect == 1) 
+  { 
     u8g2.drawRBox(xTone+56,yTone-9,154,9,1); // Rysujemy biały pasek pod regulacją danego tonu  
-    u8g2.setDrawColor(0);
+    u8g2.setDrawColor(0); 
     u8g2.drawLine(xTone+57,yTone-5,xTone+208,yTone-5);
     //u8g2.drawLine(xTone+57,yTone-4,xTone+208,yTone-4);
-    if (toneHiValue >= 0){ u8g2.drawRBox((5 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneHiValue >= 0){ u8g2.drawRBox((10 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
     if (toneHiValue < 0) { u8g2.drawRBox((2 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
     u8g2.setDrawColor(1);
   }
-  else
+  else 
   {
     u8g2.drawLine(xTone+57,yTone-5,xTone+208,yTone-5);
     //u8g2.drawLine(xTone+57,yTone-4,xTone+208,yTone-4);
-    if (toneHiValue >= 0){ u8g2.drawRBox((5 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneHiValue >= 0){ u8g2.drawRBox((10 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
     if (toneHiValue < 0) { u8g2.drawRBox((2 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
     //u8g2.drawRBox((3 * toneHiValue) + xTone + 178,yTone-7,10,6,1);
   }
@@ -3164,19 +3209,18 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
   xTone=0;
   yTone=46;
   u8g2.setCursor(xTone,yTone);
-  if (toneMidValue >= 10) {u8g2.print("Mid:  " + String(toneMidValue) + "dB");}  // Dla wartosci dodatnich piszemy normalnie
-  if ((toneMidValue >= 0) && (toneMidValue <= 9)) {u8g2.print("Mid:   " + String(toneMidValue) + "dB");}
+  if (toneMidValue >= 0) {u8g2.print("Mid:   " + String(toneMidValue) + "dB");}  // Dla wartosci dodatnich piszemy normalnie
   if ((toneMidValue < 0) && (toneMidValue >= -9)) {u8g2.print("Mid:  " + String(toneMidValue) + "dB");}
-  if (toneMidValue <= -10) {u8g2.print("Mid: " + String(toneMidValue) + "dB");}
- 
+  if ((toneMidValue < 0) && (toneMidValue < -9)) {u8g2.print("Mid: " + String(toneMidValue) + "dB");} 
+  
   xTone=20;
-  if (toneSelect == 2)
-  {
+  if (toneSelect == 2) 
+  { 
     u8g2.drawRBox(xTone+56,yTone-9,154,9,1);
     u8g2.setDrawColor(0);
     u8g2.drawLine(xTone+57,yTone-5,xTone + 208,yTone-5);
     //u8g2.drawLine(xTone+57,yTone-4,xTone + 208,yTone-4);
-    if (toneMidValue >= 0) { u8g2.drawRBox((5 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneMidValue >= 0) { u8g2.drawRBox((10 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
     if (toneMidValue < 0) { u8g2.drawRBox((2 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
     u8g2.setDrawColor(1);
   }
@@ -3184,28 +3228,27 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
   {
     u8g2.drawLine(xTone+57,yTone-5,xTone + 208,yTone-5);
     //u8g2.drawLine(xTone+57,yTone-4,xTone + 208,yTone-4);
-    if (toneMidValue >= 0) { u8g2.drawRBox((5 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneMidValue >= 0) { u8g2.drawRBox((10 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
     if (toneMidValue < 0)  { u8g2.drawRBox((2 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
     //u8g2.drawRBox((3 * toneMidValue) + xTone + 138,yTone-7,10,6,1);
   }
 
 
   // Tony niskie
-  xTone=0;
+  xTone=0; 
   yTone=64;
   u8g2.setCursor(xTone,yTone);
-  if (toneLowValue >= 10) { u8g2.print("Low:  " + String(toneLowValue) + "dB");}
-  if ((toneLowValue >= 0) && (toneLowValue <= 9)) { u8g2.print("Low:   " + String(toneLowValue) + "dB");}
+  if (toneLowValue >= 0) { u8g2.print("Low:   " + String(toneLowValue) + "dB");}
   if ((toneLowValue < 0) && (toneLowValue >= -9)) { u8g2.print("Low:  " + String(toneLowValue) + "dB");}
-  if (toneLowValue <= -10) { u8g2.print("Low: " + String(toneLowValue) + "dB");}
+  if ((toneLowValue < 0) && (toneLowValue < -9)) { u8g2.print("Low: " + String(toneLowValue) + "dB");}
   xTone=20;
-  if (toneSelect == 3)
-  {
+  if (toneSelect == 3) 
+  { 
     u8g2.drawRBox(xTone+56,yTone-9,154,9,1);
     u8g2.setDrawColor(0);
     u8g2.drawLine(xTone + 57,yTone-5,xTone + 208,yTone-5);
-   // u8g2.drawLine(xTone + 57,yTone-4,xTone + 208,yTone-4);
-    if ( toneLowValue >= 0 ) { u8g2.drawRBox((5 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
+   // u8g2.drawLine(xTone + 57,yTone-4,xTone + 208,yTone-4); 
+    if ( toneLowValue >= 0 ) { u8g2.drawRBox((10 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
     if ( toneLowValue < 0 )  { u8g2.drawRBox((2 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
     u8g2.setDrawColor(1);
   }
@@ -3213,11 +3256,11 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
   {
     u8g2.drawLine(xTone + 57,yTone-5,xTone + 208,yTone-5);
     //u8g2.drawLine(xTone + 57,yTone-4,xTone + 208,yTone-4);  
-    if ( toneLowValue >= 0 ) { u8g2.drawRBox((5 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
+    if ( toneLowValue >= 0 ) { u8g2.drawRBox((10 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
     if ( toneLowValue < 0 )  { u8g2.drawRBox((2 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
     //u8g2.drawRBox((3 * toneLowValue) + xTone + 138,yTone-7,10,6,1);
   }
-  u8g2.sendBuffer();
+  u8g2.sendBuffer(); 
 }
 
 void displayBasicInfo()
@@ -3232,7 +3275,7 @@ void displayBasicInfo()
   u8g2.setCursor(0,38); u8g2.print("Hostname:" + String(hostname) + ",  WiFi Signal:" + String(WiFi.RSSI()) + "dBm");
   u8g2.setCursor(0,51); u8g2.print("WiFi SSID:" + String(wifiManager.getWiFiSSID()));
   u8g2.setCursor(0,64); u8g2.print("IP:" + currentIP + "  MAC:" + String(WiFi.macAddress()) );
- 
+  
   u8g2.sendBuffer();
 }
 
@@ -3247,7 +3290,7 @@ void audioProcessing(void *p)
 //  OTA update callback dla Wifi Managera i trybu Recovery Mode
 void handlePreOtaUpdateCallback()
 {
-  Update.onProgress([](unsigned int progress, unsigned int total)
+  Update.onProgress([](unsigned int progress, unsigned int total) 
   {
     u8g2.setCursor(1,56); u8g2.printf("Update: %u%%\r", (progress / (total / 100)) );
     u8g2.setCursor(80,56); u8g2.print(String(progress) + "/" + String(total));
@@ -3256,118 +3299,106 @@ void handlePreOtaUpdateCallback()
   });
 }
 
-void displayRecoveryOption(int mode) {
-  const char* lines[3][3] = {
-    {">> RESET BANK=1, STATION=1 <<", "   RESET WIFI SSID, PASSWD   ", "   WEB UPDATE PORTAL         "},
-    {"   RESET BANK=1, STATION=1   ", ">> RESET WIFI SSID, PASSWD <<", "   WEB UPDATE PORTAL         "},
-    {"   RESET BANK=1, STATION=1   ", "   RESET WIFI SSID, PASSWD   ", ">> WEB UPDATE PORTAL       <<"}
-  };
-
-  u8g2.clearBuffer();
-  u8g2.setFont(spleen6x12PL);
-  u8g2.drawStr(1, 14, "[ -- Rotate Enckoder -- ]");
-  u8g2.drawStr(1, 28, lines[mode][0]);
-  u8g2.drawStr(1, 42, lines[mode][1]);
-  u8g2.drawStr(1, 56, lines[mode][2]);
-  u8g2.sendBuffer();
-}
-
-void recoveryModeCheck() {
-  if (digitalRead(SW_PIN2) == LOW) {
-    // Reset pozycji
-    myEnc.write(0);
-    recoveryMode = 0;
-    //lastPos = 0;
-
-    // Start ekran
+void recoveryModeCheck()
+{
+  if (digitalRead(SW_PIN2) == 0)
+  {
+    int8_t recoveryMode = 0;
+    int16_t recoveryModeCounter = 0;
     u8g2.clearBuffer();
     u8g2.setFont(spleen6x12PL);
     u8g2.drawStr(1,14, "RECOVERY / RESET MODE - release encoder");
     u8g2.sendBuffer();
     delay(2000);
-    while (digitalRead(SW_PIN2) == LOW) {;}
-
-    u8g2.clearBuffer();
-    u8g2.setFont(spleen6x12PL);
-    u8g2.drawStr(1,14, "Please Wait...");
+    while (digitalRead(SW_PIN2) == 0) {;}  
+    u8g2.drawStr(1,14, "Please Wait...                         ");
     u8g2.sendBuffer();
     delay(1000);
-
-    displayRecoveryOption(recoveryMode);
-
-    // Timeout setup
-    unsigned long timeoutStart = millis();
-    const unsigned long TIMEOUT_MS = 30000;
-
-    while (millis() - timeoutStart < TIMEOUT_MS) {
-    long newPos = myEnc.read() / 4;
-
-    if (newPos > lastPos) {
-      recoveryMode = (recoveryMode + 2) % 3; // kręcenie w prawo = w górę
-      displayRecoveryOption(recoveryMode);
-      timeoutStart = millis();
-    }
-    else if (newPos < lastPos) {
-      recoveryMode = (recoveryMode + 1) % 3; // kręcenie w lewo = w dół
-      displayRecoveryOption(recoveryMode);
-      timeoutStart = millis();
-    }
-
-    lastPos = newPos;
-
-      if (digitalRead(SW_PIN2) == LOW) {
-        timeoutStart = millis();  // reset timer
-
-        u8g2.clearBuffer();
-        u8g2.setFont(spleen6x12PL);
-
-        switch (recoveryMode) {
-          case 0:
-            bank_nr = 1;
-            station_nr = 1;
-            saveStationOnSPIFFS();
-            u8g2.drawStr(1,14, "SET BANK=1, STATION=1");
-            u8g2.drawStr(1,28, "ESP will RESET in 3sec.");
-            u8g2.sendBuffer();
-            delay(3000);
-            ESP.restart();
-            break;
-
-          case 1:
-            wifiManager.resetSettings();
-            u8g2.drawStr(1,14, "WIFI CLEARED");
-            u8g2.drawStr(1,28, "ESP will RESET in 3sec.");
-            u8g2.sendBuffer();
-            delay(3000);
-            ESP.restart();
-            break;
-
-          case 2:
-            u8g2.drawStr(1,14, "WEB PORTAL STARTED");
-            u8g2.drawStr(1,28, "Connect to WiFi ESP-Radio");
-            u8g2.drawStr(1,42, "Open http://192.168.4.1");
-            u8g2.sendBuffer();
-            delay(3000);
-
-            wifiManager.startConfigPortal("ESP32-Radio");
-
-            while (true) {
-              wifiManager.process();
-              wifiManager.setPreOtaUpdateCallback(handlePreOtaUpdateCallback);
-            }
-            break;
+    u8g2.clearBuffer();
+     
+    while (true)
+    {
+      u8g2.drawStr(1,14, "[ -- Rotate Enckoder -- ]            ");
+      CLK_state2 = digitalRead(CLK_PIN2);
+      if (CLK_state2 != prev_CLK_state2 && CLK_state2 == HIGH)  // Sprawdzenie, czy stan CLK zmienił się na wysoki
+      {
+        if (digitalRead(DT_PIN2) == HIGH) 
+        {
+          recoveryMode++;
+          if (recoveryMode > 2) {recoveryMode =2;}
+        }
+        else
+        {
+          recoveryMode--;
+          if (recoveryMode < 0) {recoveryMode =0;}
         }
       }
-    }
+      
+      
+      if (recoveryMode == 0)
+      {
+        u8g2.drawStr(1,28, ">> RESET BANK=1, STATION=1 <<");
+        u8g2.drawStr(1,42, "   RESET WIFI SSID, PASSWD   ");  
+        u8g2.drawStr(1,56, "   WEB UPDATE PORTAL         ");  
+      }
+      else if (recoveryMode == 1)
+      {
+        u8g2.drawStr(1,28, "   RESET BANK=1, STATION=1   ");
+        u8g2.drawStr(1,42, ">> RESET WIFI SSID, PASSWD <<");      
+        u8g2.drawStr(1,56, "   WEB UPDATE PORTAL         ");
+      }
+      
+      else if (recoveryMode == 2)
+      {
+        u8g2.drawStr(1,28, "   RESET BANK=1, STATION=1   ");
+        u8g2.drawStr(1,42, "   RESET WIFI SSID, PASSWD   ");      
+        u8g2.drawStr(1,56, ">> WEB UPDATE PORTAL       <<");
+      }    
+      u8g2.sendBuffer();
+      
+      if (digitalRead(SW_PIN2) == 0)
+      {
+        if (recoveryMode == 0)
+        {
+          bank_nr = 1;
+          station_nr = 1;
+          saveStationOnSD();
+          u8g2.clearBuffer(); 
+          u8g2.drawStr(1,14, "SET BANK=1, STATION=1         ");
+          u8g2.drawStr(1,28, "ESP will RESET in 3sec.       ");
+          u8g2.sendBuffer();
+          delay(3000);
+          ESP.restart();
+        }  
+        else if (recoveryMode == 1)
+        {
+          u8g2.clearBuffer();
+          u8g2.drawStr(1,14, "WIFI SSID, PASSWD CLEARED   ");
+          u8g2.drawStr(1,28, "ESP will RESET in 3sec.     ");
+          u8g2.sendBuffer();
+          wifiManager.resetSettings();
+          delay(3000);
+          ESP.restart();
+        }
+        else if (recoveryMode == 2)
+        {
+          u8g2.clearBuffer();
+          u8g2.drawStr(1,14, "WEB  PORTAL STARTED         ");
+          u8g2.drawStr(1,28, "Connect to WiFi ESP-Radio   ");
+          u8g2.drawStr(1,42, "Open http://192.168.4.1     ");
+          u8g2.sendBuffer();
+          //wifiManager.startWebPortal();
+          wifiManager.startConfigPortal("ESP32-Radio");
+          delay(3000);
+          while(true) { wifiManager.process(); wifiManager.setPreOtaUpdateCallback(handlePreOtaUpdateCallback);} 
+        }
 
-    // Timeout – exit recovery mode
-    u8g2.clearBuffer();
-    u8g2.setFont(spleen6x12PL);
-    u8g2.drawStr(1, 28, "Exiting recovery mode...");
-    u8g2.sendBuffer();
-    delay(2000);
-    return;
-  }
+
+
+      }
+      prev_CLK_state2 = CLK_state2;
+    }   
+  } 
 }
 void displayDimmer(bool dimmerON)
 {
@@ -3375,12 +3406,12 @@ void displayDimmer(bool dimmerON)
   Serial.print("displayDimmerActive: ");
   Serial.println(displayDimmerActive);
   //if ((dimmerON == 1) && (displayBrightness == 15)) { u8g2.sendF("ca", 0xC7, dimmerDisplayBrightness);}
- 
+  
   if ((dimmerON == 1) && (displayActive == false) && (fwupd == false)) { u8g2.setContrast(dimmerDisplayBrightness);}
-  if (dimmerON == 0)
-  {
+  if (dimmerON == 0) 
+  { 
     displayPowerSave(0);
-    u8g2.setContrast(displayBrightness);
+    u8g2.setContrast(displayBrightness); 
     displayDimmerTimeCounter = 0;
     displayPowerSaveTimeCounter = 0;
   }
@@ -3394,14 +3425,14 @@ void displayDimmer(bool dimmerON)
 void displayDimmerTimer()
 {
   displayDimmerTimeCounter++;
- 
+  
   if ((displayActive == true) && (displayDimmerActive == true)) // Jezeli wysweitlacz aktywny i jest przyciemniony
-  {
+  { 
     displayDimmerTimeCounter = 0;
     displayDimmer(0);
   }
   // Jesli upłynie czas po którym mamy przyciemnic wyswietlacz i funkcja przyciemniania włączona oraz nie jestemswy w funkcji aktulizacji OTA to
-  if ((displayDimmerTimeCounter >= displayAutoDimmerTime) && (displayAutoDimmerOn == true) && (fwupd == false))
+  if ((displayDimmerTimeCounter >= displayAutoDimmerTime) && (displayAutoDimmerOn == true) && (fwupd == false)) 
   {
     if (displayDimmerActive == false) // jesli wyswietlacz nie jest jeszcze przyciemniony
     {
@@ -3412,8 +3443,8 @@ void displayDimmerTimer()
 
   ///*
   displayPowerSaveTimeCounter++;
- 
-  if ((displayPowerSaveTimeCounter >= displayPowerSaveTime) && (displayPowerSaveEnabled == true) && (fwupd == false))
+  
+  if ((displayPowerSaveTimeCounter >= displayPowerSaveTime) && (displayPowerSaveEnabled == true) && (fwupd == false)) 
   {
     displayPowerSaveTimeCounter = 0;
     displayPowerSave(1);
@@ -3464,23 +3495,23 @@ void handleEncoder2StationsVolumeClick()
     if ((volumeSet == false) && (bankMenuEnable == false))  // Przewijanie listy stacji radiowych
     {
       station_nr = currentSelection + 1;
-      if (digitalRead(DT_PIN2) == HIGH)
+      if (digitalRead(DT_PIN2) == HIGH) 
       {
         station_nr--;
         //if (listedStations == 1) station_nr--;
-        if (station_nr < 1)
+        if (station_nr < 1) 
         {
           station_nr = stationsCount;//1;
         }
         Serial.print("Numer stacji do tyłu: ");
         Serial.println(station_nr);
         scrollUp();
-      }
-      else
+      } 
+      else 
       {
         station_nr++;
         //if (listedStations == 1) station_nr++;
-        if (station_nr > stationsCount)
+        if (station_nr > stationsCount) 
         {
           station_nr = 1;//stationsCount;
         }
@@ -3489,14 +3520,14 @@ void handleEncoder2StationsVolumeClick()
         scrollDown();
       }
       displayStations();
-    }
-    else
+    } 
+    else 
     {
       if (bankMenuEnable == false)
       {
         if (digitalRead(DT_PIN2) == HIGH) // pokrecenie enkoderem 2
-        {volumeDown();}
-        else
+        {volumeDown();} 
+        else 
         {volumeUp();}
         //volumeDisplay();
       }
@@ -3504,18 +3535,18 @@ void handleEncoder2StationsVolumeClick()
 
     if (bankMenuEnable == true)  // Przewijanie listy banków stacji radiowych
     {
-      if (digitalRead(DT_PIN2) == HIGH)
+      if (digitalRead(DT_PIN2) == HIGH) 
       {
         bank_nr--;
-        if (bank_nr < 1)
+        if (bank_nr < 1) 
         {
           bank_nr = 16;
         }
-      }
-      else
+      } 
+      else 
       {
         bank_nr++;
-        if (bank_nr > 16)
+        if (bank_nr > 16) 
         {
           bank_nr = 1;
         }
@@ -3525,8 +3556,8 @@ void handleEncoder2StationsVolumeClick()
   }
   prev_CLK_state2 = CLK_state2;
     
- 
-  if ((button2.isReleased()) && (listedStations == true))
+  
+  if ((button2.isReleased()) && (listedStations == true)) 
   {
     listedStations = false;
     volumeSet = false;
@@ -3536,7 +3567,7 @@ void handleEncoder2StationsVolumeClick()
     clearFlags();
   }
 
-  if ((button2.isPressed()) && (listedStations == false) && (bankMenuEnable == false))
+  if ((button2.isPressed()) && (listedStations == false) && (bankMenuEnable == false)) 
   {
     displayStartTime = millis();
     timeDisplay = false;
@@ -3546,7 +3577,7 @@ void handleEncoder2StationsVolumeClick()
   }
 
 
-  if ((button2.isPressed()) && (bankMenuEnable == true))
+  if ((button2.isPressed()) && (bankMenuEnable == true)) 
   {
     previous_bank_nr = bank_nr;
 
@@ -3574,24 +3605,24 @@ void handleEncoder2VolumeStationsClick()
 
     if ((listedStations == false) && (bankMenuEnable == false))  // Przewijanie listy stacji radiowych
     {
-      if (digitalRead(DT_PIN2) == HIGH)
+      if (digitalRead(DT_PIN2) == HIGH) 
       {
         volumeDown();
-      }
-      else
+      } 
+      else 
       {
         volumeUp();
       }
-    }
-    else
+    } 
+    else 
     {
-      if ((bankMenuEnable == false) && (volumeSet == true))
+      if ((bankMenuEnable == false) && (volumeSet == true)) 
       {
         if (digitalRead(DT_PIN2) == HIGH)  // pokrecenie enkoderem 2
         {
           volumeDown();
-        }
-        else
+        } 
+        else 
         {
           volumeUp();
         }
@@ -3601,13 +3632,13 @@ void handleEncoder2VolumeStationsClick()
 
     if ((listedStations == true) && (bankMenuEnable == false)) {
       station_nr = currentSelection + 1;
-      if (digitalRead(DT_PIN2) == HIGH)
+      if (digitalRead(DT_PIN2) == HIGH) 
       {
         station_nr--;
         if (station_nr < 1) { station_nr = stationsCount; }
         scrollUp();
-      }
-      else
+      } 
+      else 
       {
         station_nr++;
         if (station_nr > stationsCount) { station_nr = 1; }  //stationsCount;
@@ -3618,18 +3649,18 @@ void handleEncoder2VolumeStationsClick()
 
     if (bankMenuEnable == true)  // Przewijanie listy banków stacji radiowych
     {
-      if (digitalRead(DT_PIN2) == HIGH)
+      if (digitalRead(DT_PIN2) == HIGH) 
       {
         bank_nr--;
-        if (bank_nr < 1)
+        if (bank_nr < 1) 
         {
           bank_nr = 16;
         }
-      }
-      else
+      } 
+      else 
       {
         bank_nr++;
-        if (bank_nr > 16)
+        if (bank_nr > 16) 
         {
           bank_nr = 1;
         }
@@ -3662,18 +3693,18 @@ void handleEncoder2VolumeStationsClick()
       u8g2.clearBuffer();
       changeStation();
       displayRadio();
-      clearFlags();
+      clearFlags(); 
       //u8g2.sendBuffer();
       
     }
- 
+  
     else if ((encoderButton2 == false) && (listedStations == false) && (bankMenuEnable == false) && (volumeSet == false))  // wchodzimy do listy
     {
       displayStartTime = millis();
       timeDisplay = false;
       displayActive = true;
       listedStations = true;
-      currentSelection = station_nr - 1;
+      currentSelection = station_nr - 1; 
 
       if (currentSelection >= 0)
       {
@@ -3682,7 +3713,7 @@ void handleEncoder2VolumeStationsClick()
           firstVisibleLine = currentSelection;
         }
       }
-      else
+      else 
       {  // Jeśli osiągnięto wartość 0, przejdź do najwyższej wartości
         if (currentSelection = maxSelection())
         {
@@ -3691,10 +3722,10 @@ void handleEncoder2VolumeStationsClick()
       }   
       displayStations();
       //Serial.println("debug--------------------------------------------------> button 2 PRESSED station list");
-    }
+    } 
       
-    //else if ((listedStations == false) && (bankMenuEnable == true) && (volumeSet == false))
-    else if ((bankMenuEnable == true) && (volumeSet == false))
+    //else if ((listedStations == false) && (bankMenuEnable == true) && (volumeSet == false)) 
+    else if ((bankMenuEnable == true) && (volumeSet == false)) 
     {
       displayStartTime = millis();
       timeDisplay = false;
@@ -3727,7 +3758,7 @@ void drawSwitch(uint8_t x, uint8_t y, bool state) // Ikona przełacznika szeroka
  
  if (state == 1)          // Rysujemy przełacznik w pozycji ON z napisem
  {
-  u8g2.drawRBox(x + 8, y, 13, 10, 3);
+  u8g2.drawRBox(x + 8, y, 13, 10, 3); 
   u8g2.setDrawColor(0);
   u8g2.drawStr(x + 10,y + 8, "ON");
   u8g2.setDrawColor(1);
@@ -3745,24 +3776,24 @@ void displayConfig()
   equalizerMenuEnable = true;   // Ustawiamy flage menu equalizera
   timeDisplay = false;          // Wyłaczamy zegar
   displayActive = true;         // Wyswietlacz aktywny
- 
+  
   u8g2.setFont(spleen6x12PL);
- 
+  
   // Strona 1
   u8g2.clearBuffer();
   u8g2.drawStr(0, 10, "Menu Config:");
   //drawSwitch(0,15,displayAutoDimmerOn); u8g2.setCursor(25,24); u8g2.print("Display auto dimmer   Auto dimmmer time:" + String(displayAutoDimmerTime) + "s");
- 
+  
   //u8g2.setCursor(0,25); u8g2.print("Display auto dimmer:" + String(ESP.getEfuseMac()) + ",  FW Ver.:" + String(softwareRev));
     
-  u8g2.setCursor(0,24); u8g2.print("Display auto dimmer on/off"); drawSwitch(220,24,displayAutoDimmerOn);
+  u8g2.setCursor(0,24); u8g2.print("Display auto dimmer on/off"); drawSwitch(220,24,displayAutoDimmerOn); 
   u8g2.setCursor(0,36); u8g2.print("Auto dimmer time:"); u8g2.setCursor(225,36); u8g2.print(String(displayAutoDimmerTime) + "s");
   u8g2.setCursor(0,47); u8g2.print("Auto dimmer value 0-14:              14");
-  u8g2.setCursor(0,58); u8g2.print("Night dimmer value 0-14:              0");
+  u8g2.setCursor(0,58); u8g2.print("Night dimmer value 0-14:              0"); 
   u8g2.sendBuffer();
 }
 
-void saveConfig()
+void saveConfig() 
 {
   /*
   u8g2.clearBuffer();
@@ -3770,16 +3801,16 @@ void saveConfig()
   u8g2.drawStr(1, 33, "Saving configuration"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
   */
- 
+  
   // Sprawdź, czy plik istnieje
-  if (SPIFFS.exists("/config.txt"))
+  if (SD.exists("/config.txt")) 
   {
     Serial.println("Plik config.txt już istnieje.");
 
     // Otwórz plik do zapisu i nadpisz aktualną wartość konfiguracji
-    myFile = SPIFFS.open("/config.txt", FILE_WRITE);
-    if (myFile)
-      {
+    myFile = SD.open("/config.txt", FILE_WRITE);
+    if (myFile) 
+	  {
       myFile.println("#### ESP32 Radio Config File ####");
       myFile.print("Display Brightness =");    myFile.print(displayBrightness); myFile.println(";");
       myFile.print("Dimmer Display Brightness =");    myFile.print(dimmerDisplayBrightness); myFile.println(";");
@@ -3790,33 +3821,33 @@ void saveConfig()
       myFile.println("Encoder Function Order  =" + String(encoderFunctionOrder) + ";");
       myFile.println("Startup Display Mode  =" + String(displayMode) + ";");
       myFile.println("VU Meter On  =" + String(vuMeterOn) + ";");
-        myFile.println("VU Meter Refresh Time  =" + String(vuMeterRefreshTime) + ";");
+	    myFile.println("VU Meter Refresh Time  =" + String(vuMeterRefreshTime) + ";");
       myFile.println("Scroller Refresh Time =" + String(scrollingRefresh) + ";");
       myFile.println("ADC Keyboard Enabled =" + String(adcKeyboardEnabled) + ";");
       myFile.println("Display Power Save Enabled =" + String(displayPowerSaveEnabled) + ";");  
       myFile.println("Display Power Save Time =" + String(displayPowerSaveTime) + ";");
       myFile.close();
-      Serial.println("Aktualizacja config.txt na karcie SPIFFS");
-    }
-      else
-      {
+      Serial.println("Aktualizacja config.txt na karcie SD");
+    } 
+	  else 
+	  {
       Serial.println("Błąd podczas otwierania pliku config.txt.");
     }
-  }
-  else
+  } 
+  else 
   {
     Serial.println("Plik config.txt nie istnieje. Tworzenie...");
 
     // Utwórz plik i zapisz w nim aktualne wartości konfiguracji
-    myFile = SPIFFS.open("/config.txt", FILE_WRITE);
-    if (myFile)
-      {
+    myFile = SD.open("/config.txt", FILE_WRITE);
+    if (myFile) 
+	  {
       myFile.println("#### ESP32 Radio Config File ####");
       myFile.print("Display Brightness =");    myFile.print(displayBrightness); myFile.println(";");
       myFile.print("Dimmer Display Brightness =");    myFile.print(dimmerDisplayBrightness); myFile.println(";");
       myFile.print("Auto Dimmer Time ="); myFile.print(displayAutoDimmerTime); myFile.println(";");
       myFile.print("Auto Dimmer On ="); myFile.print(displayAutoDimmerOn); myFile.println(";");
-          myFile.println("Voice Info Every Hour =" + String(timeVoiceInfoEveryHour) + ";");
+		  myFile.println("Voice Info Every Hour =" + String(timeVoiceInfoEveryHour) + ";");
       myFile.println("VU Meter Mode =" + String(vuMeterMode) + ";");
       myFile.println("Encoder Function Order  =" + String(encoderFunctionOrder) + ";");
       myFile.println("Startup Display Mode  =" + String(displayMode) + ";");
@@ -3827,10 +3858,10 @@ void saveConfig()
       myFile.println("Display Power Save Enabled =" + String(displayPowerSaveEnabled) + ";");  
       myFile.println("Display Power Save Time =" + String(displayPowerSaveTime) + ";");
       myFile.close();
-      Serial.println("Utworzono i zapisano config.txt na karcie SPIFFS");
-    }
-      else
-      {
+      Serial.println("Utworzono i zapisano config.txt na karcie SD");
+    } 
+	  else 
+	  {
       Serial.println("Błąd podczas tworzenia pliku config.txt.");
     }
   }
@@ -3838,18 +3869,18 @@ void saveConfig()
 
 }
 
-void saveAdcConfig()
+void saveAdcConfig() 
 {
 
   // Sprawdź, czy plik istnieje
-  if (SPIFFS.exists("/adckbd.txt"))
+  if (SD.exists("/adckbd.txt")) 
   {
     Serial.println("Plik adckbd.txt już istnieje.");
 
     // Otwórz plik do zapisu i nadpisz aktualną wartość konfiguracji klawiatury ADC
-    myFile = SPIFFS.open("/adckbd.txt", FILE_WRITE);
-    if (myFile)
-      {
+    myFile = SD.open("/adckbd.txt", FILE_WRITE);
+    if (myFile) 
+	  {
       myFile.println("#### ESP32 Radio Config File - ADC Keyboard ####");
       myFile.println("keyboardButtonThreshold_0 =" + String(keyboardButtonThreshold_0) + ";");
       myFile.println("keyboardButtonThreshold_1 =" + String(keyboardButtonThreshold_1) + ";");
@@ -3871,21 +3902,21 @@ void saveAdcConfig()
       myFile.println("keyboardButtonNeutral =" + String(keyboardButtonNeutral) + ";");
       myFile.println("keyboardSampleDelay =" + String(keyboardSampleDelay) + ";");
       myFile.close();
-      Serial.println("Aktualizacja adckbd.txt na karcie SPIFFS");
-    }
-      else
-      {
+      Serial.println("Aktualizacja adckbd.txt na karcie SD");
+    } 
+	  else 
+	  {
       Serial.println("Błąd podczas otwierania pliku adckbd.txt.");
     }
-  }
-  else
+  } 
+  else 
   {
     Serial.println("Plik adckbd.txt nie istnieje. Tworzenie...");
 
     // Utwórz plik i zapisz w nim aktualne wartości konfiguracji
-    myFile = SPIFFS.open("/adckbd.txt", FILE_WRITE);
-    if (myFile)
-      {
+    myFile = SD.open("/adckbd.txt", FILE_WRITE);
+    if (myFile) 
+	  {
       myFile.println("#### ESP32 Radio Config File - ADC Keyboard ####");
       myFile.println("keyboardButtonThreshold_0 =" + String(keyboardButtonThreshold_0) + ";");
       myFile.println("keyboardButtonThreshold_1 =" + String(keyboardButtonThreshold_1) + ";");
@@ -3907,10 +3938,10 @@ void saveAdcConfig()
       myFile.println("keyboardButtonNeutral =" + String(keyboardButtonNeutral) + ";");
       myFile.println("keyboardSampleDelay =" + String(keyboardSampleDelay) + ";");
       myFile.close();
-      Serial.println("Utworzono i zapisano adckbd.txt na karcie SPIFFS");
-    }
-      else
-      {
+      Serial.println("Utworzono i zapisano adckbd.txt na karcie SD");
+    } 
+	  else 
+	  {
       Serial.println("Błąd podczas tworzenia pliku adckbd.txt.");
     }
   }
@@ -3919,19 +3950,19 @@ void saveAdcConfig()
 }
 
 
-void readConfig()
+void readConfig() 
 {
 
   Serial.println("Odczyt pliku config.txt z karty");
   String fileName = String("/config.txt"); // Tworzymy nazwę pliku
 
-  if (!SPIFFS.exists(fileName))               // Sprawdzamy, czy plik istnieje
+  if (!SD.exists(fileName))               // Sprawdzamy, czy plik istnieje
   {
     Serial.println("Błąd: Plik nie istnieje.");
     return;
   }
  
-  File configFile = SPIFFS.open(fileName, FILE_READ);// Otwieramy plik w trybie do odczytu
+  File configFile = SD.open(fileName, FILE_READ);// Otwieramy plik w trybie do odczytu
   if (!configFile)  // jesli brak pliku to...
   {
     Serial.println("Błąd: Nie można otworzyć pliku konfiguracji");
@@ -3940,13 +3971,13 @@ void readConfig()
   // Przechodzimy do odpowiedniego wiersza pliku
   int currentLine = 0;
   String configValue = "";
-  while (configFile.available())
+  while (configFile.available()) 
   {
     String line = configFile.readStringUntil(';'); //('\n');
     
     int lineStart = line.indexOf("=") + 1;  // Szukamy miejsca, gdzie zaczyna wartość zmiennej
     if ((lineStart != -1)) //&& (currentLine != 0)) // Pomijamy pierwszą linijkę gdzie jest opis pliku
-      {
+	  {
       configValue = line.substring(lineStart);  // Wyciągamy URL od "http"
       configValue.trim();                      // Usuwamy białe znaki na początku i końcu
       Serial.print(" Odczytano zmienna konfiguracji numer:" + String(currentLine) + " wartosc:");
@@ -3957,9 +3988,9 @@ void readConfig()
   }
   Serial.print("Zamykamy plik config na wartosci currentLine:");
   Serial.println(currentLine);
- 
+  
   //Odczyt kontrolny
-  //for (int i = 0; i < 16; i++)
+  //for (int i = 0; i < 16; i++) 
   //{
   //  Serial.print("wartosc: " + String(i) + " z tablicy konfiguracji:");
   //  Serial.println(configArray[i]);
@@ -3981,23 +4012,23 @@ void readConfig()
   adcKeyboardEnabled = configArray[11];
   displayPowerSaveEnabled = configArray[12];
   displayPowerSaveTime = configArray[13];
- 
+  
 }
 
 
-void readAdcConfig()
+void readAdcConfig() 
 {
 
   Serial.println("Odczyt pliku konfiguracji klawiatury ADC adckbd.txt z karty");
   String fileName = String("/adckbd.txt"); // Tworzymy nazwę pliku
 
-  if (!SPIFFS.exists(fileName))               // Sprawdzamy, czy plik istnieje
+  if (!SD.exists(fileName))               // Sprawdzamy, czy plik istnieje
   {
     Serial.println("Błąd: Plik nie istnieje.");
     return;
   }
  
-  File configFile = SPIFFS.open(fileName, FILE_READ);// Otwieramy plik w trybie do odczytu
+  File configFile = SD.open(fileName, FILE_READ);// Otwieramy plik w trybie do odczytu
   if (!configFile)  // jesli brak pliku to...
   {
     Serial.println("Błąd: Nie można otworzyć pliku konfiguracji klawiatury ADC");
@@ -4006,13 +4037,13 @@ void readAdcConfig()
   // Przechodzimy do odpowiedniego wiersza pliku
   int currentLine = 0;
   String configValue = "";
-  while (configFile.available())
+  while (configFile.available()) 
   {
     String line = configFile.readStringUntil(';'); //('\n');
     
     int lineStart = line.indexOf("=") + 1;  // Szukamy miejsca, gdzie zaczyna wartość zmiennej
     if ((lineStart != -1)) //&& (currentLine != 0)) // Pomijamy pierwszą linijkę gdzie jest opis pliku
-      {
+	  {
       configValue = line.substring(lineStart);  // Wyciągamy URL od "http"
       configValue.trim();                      // Usuwamy białe znaki na początku i końcu
       Serial.print(" Odczytano ustawienie ADC nr.:" + String(currentLine) + " wartosc:");
@@ -4023,9 +4054,9 @@ void readAdcConfig()
   }
   Serial.print("Zamykamy plik config na wartosci currentLine:");
   Serial.println(currentLine);
- 
+  
   //Odczyt kontrolny
-  //for (int i = 0; i < 16; i++)
+  //for (int i = 0; i < 16; i++) 
   //{
   //  Serial.print("wartosc poziomu ADC: " + String(i) + " z tablicy:");
   //  Serial.println(configAdcArray[i]);
@@ -4052,7 +4083,7 @@ void readAdcConfig()
   keyboardButtonThreshold_Scan = configAdcArray[14];    // Przycisk Scan - funkcja Dimmer ekranu OLED
   keyboardButtonThreshold_Mute = configAdcArray[15];      // Przycisk Mute - funkcja MUTE
   keyboardButtonThresholdTolerance = configAdcArray[16];  // Tolerancja dla pomiaru ADC
-  keyboardButtonNeutral = configAdcArray[17];             // Pozycja neutralna
+  keyboardButtonNeutral = configAdcArray[17];             // Pozycja neutralna 
   keyboardSampleDelay = configAdcArray[18];               // Czas co ile ms odczytywac klawiature
 
 }
@@ -4062,14 +4093,14 @@ void readAdcConfig()
 void readPSRAMstations()  // Funkcja testowa-debug, do odczytu PSRAMu, nie uzywana przez inne funkcje
 {
   Serial.println("-------- POCZATEK LISTY STACJI ---------- ");
-  for (int i = 0; i < stationsCount; i++)
+  for (int i = 0; i < stationsCount; i++) 
   {
     // Odczyt stacji pod daną komórka pamieci PSRAM:
     char station[STATION_NAME_LENGTH + 1];  // Tablica na nazwę stacji o maksymalnej długości zdefiniowanej przez STATION_NAME_LENGTH
     memset(station, 0, sizeof(station));    // Wyczyszczenie tablicy zerami przed zapisaniem danych
     int length = psramData[(i) * (STATION_NAME_LENGTH + 1)];   // Odczytaj długość nazwy stacji z PSRAM dla bieżącego indeksu stacji
       
-    for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++)
+    for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++) 
     { // Odczytaj nazwę stacji z PSRAM jako ciąg bajtów, maksymalnie do STATION_NAME_LENGTH
         station[j] = psramData[(i) * (STATION_NAME_LENGTH + 1) + 1 + j];  // Odczytaj znak po znaku nazwę stacji
     }
@@ -4078,8 +4109,8 @@ void readPSRAMstations()  // Funkcja testowa-debug, do odczytu PSRAMu, nie uzywa
     Serial.print(i+1);
     Serial.print(" ");
     Serial.println(stationNameText);
-  }    
- 
+  }	
+  
   Serial.println("-------- KONIEC LISTY STACJI ---------- ");
 
   String stationUrl = "";
@@ -4089,13 +4120,13 @@ void readPSRAMstations()  // Funkcja testowa-debug, do odczytu PSRAMu, nie uzywa
   memset(station, 0, sizeof(station));    // Wyczyszczenie tablicy zerami przed zapisaniem danych
   int length = psramData[(station_nr - 1) * (STATION_NAME_LENGTH + 1)];   // Odczytaj długość nazwy stacji z PSRAM dla bieżącego indeksu stacji
       
-  for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++)
+  for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++) 
   { // Odczytaj nazwę stacji z PSRAM jako ciąg bajtów, maksymalnie do STATION_NAME_LENGTH
     station[j] = psramData[(station_nr - 1) * (STATION_NAME_LENGTH + 1) + 1 + j];  // Odczytaj znak po znaku nazwę stacji
   }
- 
+  
   //String stationNameText = String(station);
- 
+  
   Serial.println("-------- OBECNIE GRAMY  ---------- ");
   Serial.print(station_nr - 1);
   Serial.print(" ");
@@ -4103,11 +4134,11 @@ void readPSRAMstations()  // Funkcja testowa-debug, do odczytu PSRAMu, nie uzywa
 
 }
 
-void webUrlStationPlay()
+void webUrlStationPlay() 
 {
   stationString.remove(0);  // Usunięcie wszystkich znaków z obiektu stationString
   stationNameStream.remove(0);
- 
+  
   audio.stopSong();
 
   u8g2.clearBuffer();
@@ -4115,28 +4146,28 @@ void webUrlStationPlay()
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
-  mp3 = flac = aac = vorbis = opus = false;
+  mp3 = flac = aac = vorbis = false;
     
   Serial.println("debug-- Read station from WEB URL");
     
-  if (url2play != "")
+  if (url2play != "") 
   {
     url2play.trim();                      // Usuwamy białe znaki na początku i końcu
   }
   else
   {
-      return;
+	  return;
   }
- 
+  
   if (url2play.isEmpty()) // jezeli link URL jest pusty
   {
     Serial.println("Błąd: Nie znaleziono stacji dla podanego numeru.");
     return;
   }
- 
- 
+  
+  
   // Weryfikacja, czy w linku znajduje się "http" lub "https"
-  if (url2play.startsWith("http://") || url2play.startsWith("https://"))
+  if (url2play.startsWith("http://") || url2play.startsWith("https://")) 
   {
     // Wydrukuj nazwę stacji i link na serialu
     Serial.print("Link do stacji: ");
@@ -4154,8 +4185,8 @@ void webUrlStationPlay()
     audio.connecttohost(url2play.c_str());
     
 
-  }
-  else
+  } 
+  else 
   {
     Serial.println("Błąd: link stacji nie zawiera 'http' lub 'https'");
     Serial.println("Odczytany URL: " + url2play);
@@ -4185,18 +4216,18 @@ void stationBankListHtmlMobile()
     if (i == 8) {html+= "</p><p>";}
   }
   html += "</p>";
-  html += "<center>";
+  html += "<center>"; 
  
   html += "<table>";
   //html += "<tr><th colspan=\"2\" align=\"left\">Bank " + String(bank_nr) + " stations:</th></tr>";
- 
+  
 
-  for (int i = 0; i < stationsCount; i++)
+  for (int i = 0; i < stationsCount; i++) 
   {
     char station[STATION_NAME_LENGTH + 1];  // Tablica na nazwę stacji o maksymalnej długości zdefiniowanej przez STATION_NAME_LENGTH
     memset(station, 0, sizeof(station));    // Wyczyszczenie tablicy zerami przed zapisaniem danych
     int length = psramData[i * (STATION_NAME_LENGTH + 1)];
-    for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++)
+    for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++) 
     {
       station[j] = psramData[i * (STATION_NAME_LENGTH + 1) + 1 + j];  // Odczytaj znak po znaku nazwę stacji
     }
@@ -4222,7 +4253,7 @@ void stationBankListHtmlMobile()
   html += "</div>" + String("\n");
 
   html += "<p style=\"font-size: 0.8rem;\">Web Radio, mobile, Evo: " + String(softwareRev) + "</p>" + String("\n");
-  //html += "<p style=\"font-size: 0.8rem;\"><a href=\"list\">SPIFFS CARD, </a><a href='/fwupdate'>OTA UPDATE, </a><a href='/config'>CONFIG</a></p>" + String("\n");
+  //html += "<p style=\"font-size: 0.8rem;\"><a href=\"list\">SD CARD, </a><a href='/fwupdate'>OTA UPDATE, </a><a href='/config'>CONFIG</a></p>" + String("\n");
   html += "<p style='font-size: 0.8rem;'><a href='/menu'>MENU</a></p>" + String("\n");
   html += "</center></body></html>";
 
@@ -4244,28 +4275,28 @@ void stationBankListHtmlPC()
       html+= "<button class=\"buttonBank\" onClick=\"bankLoad('" + String(i) + "');\" id=\"Bank\" )>" + String(i) + "</button>" + String("\n");
     }
   }
- 
+  
   html += "</p>";
   html += "<center>" + String("\n");
   html += "<div class=\"column\">" + String("\n");
-  for (int i = 0; i < MAX_STATIONS; i++)
-  //for (int i = 0; i < stationsCount; i++)
+  for (int i = 0; i < MAX_STATIONS; i++) 
+  //for (int i = 0; i < stationsCount; i++) 
   {
     char station[STATION_NAME_LENGTH + 1];  // Tablica na nazwę stacji o maksymalnej długości zdefiniowanej przez STATION_NAME_LENGTH
     memset(station, 0, sizeof(station));    // Wyczyszczenie tablicy zerami przed zapisaniem danych
 
     int length = psramData[i * (STATION_NAME_LENGTH + 1)];
-    for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++)
+    for (int j = 0; j < min(length, STATION_NAME_LENGTH); j++) 
     {
       station[j] = psramData[i * (STATION_NAME_LENGTH + 1) + 1 + j];  // Odczytaj znak po znaku nazwę stacji
     }     
 
     
     if ((i == 0) || (i == 25) || (i == 50) || (i == 75))
-    {
+    { 
       html += "<table>" + String("\n");
       //html += "<tr><th>No</th><th>Station</th></tr>" + String("\n");
-    }
+    } 
     
     // 0-98   >98
     if (i >= stationsCount) { station[0] ='\0'; } // Jesli mamy mniej niz 99 stacji to wypełniamy pozostałe komórki pustymi wartościami
@@ -4287,7 +4318,7 @@ void stationBankListHtmlPC()
     }
 
     if ((i == 24) || (i == 49) || (i == 74)) //||(i == 98))
-    {
+    { 
       html += "</table>" + String("\n");
     }
            
@@ -4296,10 +4327,10 @@ void stationBankListHtmlPC()
   html += "</table>" + String("\n");
   html += "</div>" + String("\n");
   html += "<p style=\"font-size: 0.8rem;\">Web Radio, desktop, Evo: " + String(softwareRev) + "</p>" + String("\n");
-  //html += "<p style=\"font-size: 0.8rem;\"><a href=\"list\">SPIFFS CARD, </a><a href='/fwupdate'>OTA UPDATE, </a><a href='/config'>CONFIG</a></p>" + String("\n");
+  //html += "<p style=\"font-size: 0.8rem;\"><a href=\"list\">SD CARD, </a><a href='/fwupdate'>OTA UPDATE, </a><a href='/config'>CONFIG</a></p>" + String("\n");
   html += "<p style='font-size: 0.8rem;'><a href='/menu'>MENU</a></p>" + String("\n");
 
-  html += "</center></body></html>";
+  html += "</center></body></html>"; 
 
 }
 
@@ -4310,7 +4341,7 @@ void voiceTime()
   String time_s;
   struct tm timeinfo;
   char timeString[9];  // Bufor przechowujący czas w formie tekstowej
-  if (!getLocalTime(&timeinfo, 5))
+  if (!getLocalTime(&timeinfo, 5)) 
   {
     Serial.println("Nie udało się uzyskać czasu funkcji voice time");
     return;  // Zakończ funkcję, gdy nie udało się uzyskać czasu
@@ -4335,7 +4366,7 @@ void voiceTimeEn()
   struct tm timeinfo;
   char timeString[9];  // Bufor przechowujący czas w formie tekstowej
 
-  if (!getLocalTime(&timeinfo, 5))
+  if (!getLocalTime(&timeinfo, 5)) 
   {
     Serial.println("Nie udało się uzyskać czasu funkcji voice time");
     return;  // Zakończ funkcję, gdy nie udało się uzyskać czasu
@@ -4353,16 +4384,16 @@ void voiceTimeEn()
 }
 
 
-void readRemoteConfig()
+void readRemoteConfig() 
 {
 
   Serial.println("IR - Config, odczyt pliku konfiguracji pilota IR remote.txt z karty");
- 
+  
     // Tworzymy nazwę pliku
   String fileName = String("/remote.txt");
 
   // Sprawdzamy, czy plik istnieje
-  if (!SPIFFS.exists(fileName))
+  if (!SD.exists(fileName)) 
   {
     Serial.println("IR - Config, błąd, Plik konfiguracji pilota IR remote.txt nie istnieje.");
     configIrExist = false;
@@ -4370,7 +4401,7 @@ void readRemoteConfig()
   }
 
   // Otwieramy plik w trybie do odczytu
-  File configRemoteFile = SPIFFS.open(fileName, FILE_READ);
+  File configRemoteFile = SD.open(fileName, FILE_READ);
   if (!configRemoteFile)  // jesli brak pliku to...
   {
     Serial.println("IR - Config, błąd, nie można otworzyć pliku konfiguracji pilota IR");
@@ -4386,7 +4417,7 @@ void readRemoteConfig()
     String line = configRemoteFile.readStringUntil(';'); //('\n');
     int lineStart = line.indexOf("0x") + 2;  // Szukamy miejsca, gdzie zaczyna wartość zmiennej
     if ((lineStart != -1)) //&& (currentLine != 0)) // Pomijamy pierwszą linijkę gdzie jest opis pliku
-      {
+	  {
       configValue = line.substring(lineStart, lineStart + 5);  // Wyciągamy adres i komende
       configValue.trim();                      // Usuwamy białe znaki na początku i końcu
       Serial.print(" Odczytano kod: " + String(currentLine) + " wartosc:");
@@ -4406,7 +4437,7 @@ void assignRemoteCodes()
   Serial.print("IR Config - assignRemoteCodes, configIrExist: ");
   Serial.println(configIrExist);
 
-  if ((noSPIFFScard == false) && (configIrExist == true))
+  if ((noSDcard == false) && (configIrExist == true)) 
   {
   Serial.println("IR config - Przypisuje wartosci z pliku Remote.txt");
   rcCmdVolumeUp = configRemoteArray[0];    // Głosnosc +
@@ -4415,15 +4446,15 @@ void assignRemoteCodes()
   rcCmdArrowLeft = configRemoteArray[3];   // strzałka w lewo - poprzednia stacja  
   rcCmdArrowUp = configRemoteArray[4];     // strzałka w góre - lista stacji krok do gory
   rcCmdArrowDown = configRemoteArray[5];   // strzałka w dół - lista stacj krok na dół
-  rcCmdBack = configRemoteArray[6];          // Przycisk powrotu
+  rcCmdBack = configRemoteArray[6]; 	     // Przycisk powrotu
   rcCmdOk = configRemoteArray[7];          // Przycisk Ent - zatwierdzenie stacji
   rcCmdSrc = configRemoteArray[8];         // Przełączanie źródła radio, odtwarzacz
   rcCmdMute = configRemoteArray[9];        // Wyciszenie dzwieku
   rcCmdAud = configRemoteArray[10];        // Equalizer dzwieku
-  rcCmdDirect = configRemoteArray[11];     // Jasność ekranu, dwa tryby 1/16 lub pełna jasność     
+  rcCmdDirect = configRemoteArray[11];     // Janość ekranu, dwa tryby 1/16 lub pełna janość     
   rcCmdBankMinus = configRemoteArray[12];  // Wysweitla wybór banku
   rcCmdBankPlus = configRemoteArray[13];   // Wysweitla wybór banku
-  rcCmdRed = configRemoteArray[14];        // Przełacza ładowanie banku kartaSPIFFS - serwer GitHub w menu bank
+  rcCmdRed = configRemoteArray[14];        // Przełacza ładowanie banku kartaSD - serwer GitHub w menu bank
   rcCmdGreen = configRemoteArray[15];      // VU wyłaczony, VU tryb 1, VU tryb 2, zegar
   rcCmdKey0 = configRemoteArray[16];       // Przycisk "0"
   rcCmdKey1 = configRemoteArray[17];       // Przycisk "1"
@@ -4436,7 +4467,7 @@ void assignRemoteCodes()
   rcCmdKey8 = configRemoteArray[24];       // Przycisk "8"
   rcCmdKey9 = configRemoteArray[25];       // Przycisk "9"
   }
-  else if ((noSPIFFScard == true) || (configIrExist == false)) // Jesli nie ma karty SPIFFS przypisujemy standardowe wartosci dla pilota Kenwood RC-406
+  else if ((noSDcard == true) || (configIrExist == false)) // Jesli nie ma karty SD przypisujemy standardowe wartosci dla pilota Kenwood RC-406
   {
     Serial.println("IR Config - Przypisuje wartosci domyslne");
     rcCmdVolumeUp = 0xB914;   // Głosnosc +
@@ -4445,7 +4476,7 @@ void assignRemoteCodes()
     rcCmdArrowLeft = 0xB90A;  // strzałka w lewo - poprzednia stacja  
     rcCmdArrowUp = 0xB987;    // strzałka w góre - lista stacji krok do gory
     rcCmdArrowDown = 0xB986;  // strzałka w dół - lista stacj krok na dół
-    rcCmdBack = 0xB985;             // Przycisk powrotu
+    rcCmdBack = 0xB985;	   	  // Przycisk powrotu
     rcCmdOk = 0xB90E;         // Przycisk Ent - zatwierdzenie stacji
     rcCmdSrc = 0xB913;        // Przełączanie źródła radio, odtwarzacz
     rcCmdMute = 0xB916;       // Wyciszenie dzwieku
@@ -4453,7 +4484,7 @@ void assignRemoteCodes()
     rcCmdDirect = 0xB90F;     // Janość ekranu, dwa tryby 1/16 lub pełna janość     
     rcCmdBankMinus = 0xB90C;  // Wysweitla wybór banku
     rcCmdBankPlus = 0xB90D;   // Wysweitla wybór banku
-    rcCmdRed = 0xB988;        // Przełacza ładowanie banku kartaSPIFFS - serwer GitHub w menu bank
+    rcCmdRed = 0xB988;        // Przełacza ładowanie banku kartaSD - serwer GitHub w menu bank
     rcCmdGreen = 0xB992;      // VU wyłaczony, VU tryb 1, VU tryb 2, zegar
     rcCmdKey0 = 0xB900;       // Przycisk "0"
     rcCmdKey1 = 0xB901;       // Przycisk "1"
@@ -4503,14 +4534,14 @@ void readRcStoredCodes(uint8_t x) // Odczyt kdów pilota - funkcja eksperymental
   u8g2.setCursor(0,60); u8g2.print("Key 5:" + String(rcCmdKey0, HEX) + "  Key 0:" + String(rcCmdKey0, HEX));
   }
 
-  u8g2.sendBuffer();
+  u8g2.sendBuffer(); 
 }
 
-void listFiles(String path, String &html)
+void listFiles(String path, String &html) 
 {
-    File root = SPIFFS.open(path);
+    File root = SD.open(path);
     if (!root) {
-        Serial.println("Nie można otworzyć karty SPIFFS!");
+        Serial.println("Nie można otworzyć karty SD!");
         return;
     }
 
@@ -4561,12 +4592,12 @@ void listFiles(String path, String &html)
 
 //####################################################################################### SETUP ####################################################################################### //
 
-void setup()
+void setup() 
 {
   // Inicjalizuj komunikację szeregową (Serial)
   Serial.begin(115200);
   Serial.println("---------- START of ESP32 Network Radio -----------");
- 
+  
   psramData = (unsigned char *)ps_malloc(PSRAM_lenght * sizeof(unsigned char));
 
   if (psramInit()) {
@@ -4584,12 +4615,12 @@ void setup()
   //AudioBuffer(16384);
   audioBuffer.changeMaxBlockSize(16384);
   wifiManager.setHostname(hostname);
- 
+  
   EEPROM.begin(128);
 
-  // Ustaw pin CS dla karty SPIFFS jako wyjście i ustaw go na wysoki stan
-  //pinMode(SPIFFS_CS, OUTPUT);
-  //digitalWrite(SPIFFS_CS, HIGH);
+  // Ustaw pin CS dla karty SD jako wyjście i ustaw go na wysoki stan
+  pinMode(SD_CS, OUTPUT);
+  digitalWrite(SD_CS, HIGH);
 
 
   // Konfiguruj piny enkodera jako wejścia
@@ -4597,14 +4628,14 @@ void setup()
   pinMode(DT_PIN2, INPUT_PULLUP);
   // Inicjalizacja przycisków enkoderów jako wejścia
   pinMode(SW_PIN2, INPUT_PULLUP);
- 
+  
   pinMode(recv_pin, INPUT_PULLUP);
 
   attachInterrupt(digitalPinToInterrupt(recv_pin), pulseISR, CHANGE);
 
   analogReadResolution(12); // Set ADC resolution to 12 bits (0-4095 range)
   analogSetAttenuation(ADC_11db); // Set the ADC input attenuation (0dB for 0-3.3V range)
- 
+  
   // Odczytaj początkowy stan pinu CLK enkodera
   prev_CLK_state2 = digitalRead(CLK_PIN2);
 
@@ -4615,15 +4646,15 @@ void setup()
   SPI.begin(SPI_SCK_OLED, SPI_MISO_OLED, SPI_MOSI_OLED);
   SPI.setFrequency(1000000);
 
-  // Inicjalizacja SPI z nowymi pinami dla czytnika kart SPIFFS
-  //customSPI.begin(SPIFFS_SCLK, SPIFFS_MISO, SPIFFS_MOSI, SPIFFS_CS);  // SCLK = 45, MISO = 21, MOSI = 48, CS = 47
+  // Inicjalizacja SPI z nowymi pinami dla czytnika kart SD
+  customSPI.begin(SD_SCLK, SD_MISO, SD_MOSI, SD_CS);  // SCLK = 45, MISO = 21, MOSI = 48, CS = 47
   // Inicjalizuj wyświetlacz i odczekaj 250 milisekund na włączenie
   u8g2.begin();
   delay(250);
 
   // Powitanie na wyswietlaczu:
   //u8g2.sendF("ca", 0xC7, displayBrightness); // Ustawiamy jasność ekranu zgodnie ze zmienna displayBrightness
- 
+  
   u8g2.drawXBMP(0, 5, notes_width, notes_height, notes);  // obrazek - nutki
   u8g2.setFont(u8g2_font_fub14_tf);
   u8g2.drawStr(58, 17, "Internet Radio");
@@ -4631,41 +4662,41 @@ void setup()
   u8g2.drawStr(226, 62, softwareRev);
   u8g2.sendBuffer();
 
-  // Inicjalizacja karty SPIFFS
-  //if (!SPIFFS.begin(SPIFFS_CS, customSPI))
-  if (!SPIFFS.begin(true))    // jesli chcemy uzwać pamieci SPIFFS zamieniamy wszystkie wpisy "SPIFFS." na "SPIFFS."
+  // Inicjalizacja karty SD
+  if (!SD.begin(SD_CS, customSPI)) 
+  //if (!SPIFFS.begin(true))    // jesli chcemy uzwać pamieci SPIFFS zamieniamy wszystkie wpisy "SD." na "SPIFFS."
   {
-    // Informacja na wyswietlaczu o problemach lub braku karty SPIFFS
-    Serial.println("Błąd inicjalizacji karty SPIFFS!");
+    // Informacja na wyswietlaczu o problemach lub braku karty SD
+    Serial.println("Błąd inicjalizacji karty SD!");
     //u8g2.clearBuffer();
     u8g2.setFont(spleen6x12PL);
-    u8g2.drawStr(5, 62, "Error - Please check SPIFFS card");
+    u8g2.drawStr(5, 62, "Error - Please check SD card");
     u8g2.setDrawColor(0);
     u8g2.drawBox(212, 0, 44, 45);
     u8g2.setDrawColor(1);
-    u8g2.drawXBMP(220, 3, 30, 40, spiffscard);  // ikona SPIFFS karty
+    u8g2.drawXBMP(220, 3, 30, 40, sdcard);  // ikona SD karty
     u8g2.sendBuffer();
   //  while(true) {;;} // Zostajemy tutaj az do resetu i ponownego sprawdzenia karty
   //  return;
-    noSPIFFScard = true; // Flaga braku karty SPIFFS, będziemy użwyać EEPROM
+    noSDcard = true; // Flaga braku karty SD, będziemy użwyać EEPROM 
     delay(2000);
   }
   else
   {
-  Serial.println("Karta SPIFFS zainicjalizowana pomyślnie.");
+  Serial.println("Karta SD zainicjalizowana pomyślnie.");
   }
   Serial.print("Numer seryjny ESP:");
   Serial.println(ESP.getEfuseMac());
 
- 
+  
  // audioBuffer.changeMaxBlockSize(16384);
 
   //u8g2.drawStr(5, 32, "Internet Radio");
   //u8g2.sendBuffer();
   u8g2.setFont(spleen6x12PL);
   u8g2.drawStr(5, 62, "Connecting to network...    ");
- 
- 
+  
+  
   u8g2.sendBuffer();
   //u8g2.sendF("ca", 0xC7, displayBrightness); // Ustawiamy jasność ekranu zgodnie ze zmienna displayBrightness
   button2.setDebounceTime(50);  // Ustawienie czasu debouncingu dla przycisku enkodera 2
@@ -4673,9 +4704,9 @@ void setup()
   // Inicjalizacja WiFiManagera
   wifiManager.setConfigPortalBlocking(false);
 
-  readStationFromSPIFFS();   // Odczytujemy zapisaną ostanią stację i bank z karty SPIFFS /EEPROMu
-  readEqualizerFromSPIFFS(); // Odczytujemy ustawienia filtrów equalizera z karty SPIFFS
-  readVolumeFromSPIFFS();    // Odczytujemy nastawę ostatniego poziomu głośnosci z karty SPIFFS /EEPROMu
+  readStationFromSD();   // Odczytujemy zapisaną ostanią stację i bank z karty SD /EEPROMu
+  readEqualizerFromSD(); // Odczytujemy ustawienia filtrów equalizera z karty SD 
+  readVolumeFromSD();    // Odczytujemy nastawę ostatniego poziomu głośnosci z karty SD /EEPROMu
   readConfig();          // Odczyt konfiguracji
   readAdcConfig();       // Odczyt konfiguracji klaiwautry ADC
   readRemoteConfig();    // Odczyt konfiguracji pilota IR
@@ -4685,7 +4716,7 @@ void setup()
 
   /*-------------------- RECOVERY MODE --------------------*/
   recoveryModeCheck();
- 
+  
   previous_bank_nr = bank_nr;  // wyrównanie wartości przy stacie radia aby nie podmienic bank_nr na wartość 0 po pierwszym upływie czasu menu
   Serial.print("debug1...wartość bank_nr:");
   Serial.println(bank_nr);
@@ -4695,7 +4726,7 @@ void setup()
   Serial.println(station_nr);
 
   // Rozpoczęcie konfiguracji Wi-Fi i połączenie z siecią, jeśli konieczne
-  if (wifiManager.autoConnect("ESP32-Radio"))
+  if (wifiManager.autoConnect("ESP32-Radio")) 
   {
     Serial.println("Połączono z siecią WiFi");
     //u8g2.clearBuffer();
@@ -4725,10 +4756,10 @@ void setup()
     //timer1.attach(1, updateTimer);   // Ustaw timer, aby wywoływał funkcję updateTimer co sekundę
     //timer2.attach(60, getWeatherData);   // Ustaw timer, aby wywoływał funkcję getWeatherData co 60 sekund
     //timer3.attach(10, switchWeatherData);   // Ustaw timer, aby wywoływał funkcję switchWeatherData co 10 sekund
- 
+  
 
-    uint8_t temp_station_nr = station_nr; // Chowamy na chwile odczytaną stacje z karty SPIFFS aby podczas ładowania banku nie zmienic ostatniej odtwarzanej stacji
-    fetchStationsFromServer();            // Ładujemy liste stacji z karty SPIFFS  lub serwera GitHub
+    uint8_t temp_station_nr = station_nr; // Chowamy na chwile odczytaną stacje z karty SD aby podczas ładowania banku nie zmienic ostatniej odtwarzanej stacji
+    fetchStationsFromServer();            // Ładujemy liste stacji z karty SD  lub serwera GitHub
     station_nr = temp_station_nr ;        // Przywracamy numer po odczycie stacji
     changeStation();                      // Ustawiamy stację
     
@@ -4740,28 +4771,28 @@ void setup()
     {
       String userAgent = request->header("User-Agent");
       
-      if (userAgent.indexOf("Mobile") != -1) // Jestesmy na telefonie
+      if (userAgent.indexOf("Mobile") != -1) // Jestesmy na telefonie 
       {
         stationBankListHtmlMobile();
         html = String(index_html) + html;
-      }
+      } 
       else //Jestemy na komputerze typu desktop
       {
         stationBankListHtmlPC();
         html = String(index_html) + html;  // Składamy cześć stałą html z częscią generowaną dynamicznie
       }
       
-      request->send(200, "text/html", html.c_str(), processor);
+      request->send_P(200, "text/html", html.c_str(), processor);
     });
 
     server.on("/favicon.ico", HTTP_GET, [](AsyncWebServerRequest *request){
-        //request->send(SPIFFS, "/favicon.png", "image/x-icon");
-        request->send(SPIFFS, "/favicon.ico", "image/x-icon");       
+        //request->send(SD, "/favicon.png", "image/x-icon");
+        request->send(SD, "/favicon.ico", "image/x-icon");       
     });
     
     server.on("/icon.png", HTTP_GET, [](AsyncWebServerRequest *request){
-        //request->send(SPIFFS, "/favicon.png", "image/x-icon");
-        request->send(SPIFFS, "/icon.png", "image/x-icon");       
+        //request->send(SD, "/favicon.png", "image/x-icon");
+        request->send(SD, "/icon.png", "image/x-icon");       
     });
 
     server.on("/menu", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -4777,8 +4808,8 @@ void setup()
       String html = "<html><body>";
       html += "<h2>ESP Radio - OTA Update</h2>";
       html += "<form id='uploadForm' method='POST' action='/firmware' enctype='multipart/form-data'>";
-        html += "<input type='file' id='fileInput' name='update' />";
-        html += "<input type='submit' value='Upload' /><p id='fileSizeMessage'></p></form>";
+	    html += "<input type='file' id='fileInput' name='update' />"; 
+	    html += "<input type='submit' value='Upload' /><p id='fileSizeMessage'></p></form>";
       html += "<script>document.getElementById('fileInput').addEventListener('change', function() {const file = this.files[0];";
       html += "const messageElement = document.getElementById('fileSizeMessage');";
       html += "messageElement.textContent = \"File size: \" + (file.size / 1024).toFixed(2) + \" KB\"; messageElement.style.color = \"green\";});";
@@ -4825,7 +4856,7 @@ void setup()
             Update.printError(Serial);
         }
         if (final) {
-            if (Update.end(true))
+            if (Update.end(true)) 
             {
               displayStartTime = millis();
               timeDisplay = false;
@@ -4835,8 +4866,8 @@ void setup()
               u8g2.sendBuffer();
               delay(3000);
               ESP.restart();
-            }
-            else
+            } 
+            else 
             {
               Update.printError(Serial);
             }
@@ -4848,18 +4879,18 @@ void setup()
       stationBankListHtmlPC();
       html = String(index_html) + html;
 
-      request->send(200, "text/html", html.c_str(), processor);
+      request->send_P(200, "text/html", html.c_str(), processor);
     });
 
     server.on("/displayMode", HTTP_GET, [](AsyncWebServerRequest *request)
     {
-      ir_code = rcCmdSrc; // Udajemy kod pilota SRC - zmiana trybu wyswietlacza
+      ir_code = rcCmdSrc; // Udajemy kod pilota SRC - zmiana trybu wyswietlacza 
       bit_count = 32;
       calcNec();          // Przeliczamy kod pilota na pełny oryginalny kod NEC
       
       //request->redirect("/");
       request->send(200, "text/plain", "DisplayMode Changed"); // Wysyłanie aktualnej wartości
-      //request->send(200, "text/html", html.c_str(), processor);
+      //request->send_P(200, "text/html", html.c_str(), processor);
     });
 
     server.on("/playTime", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -4871,12 +4902,12 @@ void setup()
 
     server.on("/editor", HTTP_GET, [](AsyncWebServerRequest *request)
     {
-      request->send(SPIFFS, "/editor.html", "text/html"); //"application/octet-stream");
+      request->send(SD, "/editor.html", "text/html"); //"application/octet-stream");
     });
 /*
-    server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request)
+    server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request) 
     {
-        String html = "<html><body><h1>SPIFFS card content:</h1><ul>";
+        String html = "<html><body><h1>SD card content:</h1><ul>";
         html += "<form action=\"/upload\" method=\"POST\" enctype=\"multipart/form-data\">";
         html += "<input type=\"file\" name=\"file\"><br>";
         html += "<input type=\"submit\" value=\"Upload\">";
@@ -4897,15 +4928,13 @@ void setup()
 
     String filename = request->getParam("filename")->value();
     if (!filename.startsWith("/")) { filename = "/" + filename;}
-    File file = SPIFFS.open(filename, FILE_READ);
+    File file = SD.open(filename, FILE_READ);
     if (!file) {
         request->send(404, "text/plain", "Nie można otworzyć pliku");
         return;
     }
 
-    String html = "<!DOCTYPE html><html><head>";
-    html += "<meta charset=\"UTF-8\">";
-    html += "<title>Edit File</title></head><body>";
+    String html = "<html><head><title>Edit File</title></head><body>";
     html += "<h2>Editing: " + filename + "</h2>";
     html += "<form method='POST' action='/save'>";
     html += "<input type='hidden' name='filename' value='" + filename + "'>";
@@ -4936,7 +4965,7 @@ void setup()
     }
 
     String filename = request->getParam("filename")->value();
-    File file = SPIFFS.open("/" + filename, "r");
+    File file = SD.open("/" + filename, "r");
     if (!file || file.isDirectory()) {
         request->send(404, "text/plain", "File not found");
         return;
@@ -5023,7 +5052,7 @@ void setup()
     String filename = request->getParam("filename", true)->value();
     String content = request->getParam("content", true)->value();
 
-    File file = SPIFFS.open(filename, FILE_WRITE);
+    File file = SD.open(filename, FILE_WRITE);
     if (!file) {
         request->send(500, "text/plain", "Nie można zapisać pliku");
         return;
@@ -5036,12 +5065,12 @@ void setup()
     });
 
 
-    server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request)
+    server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request) 
     {
         
     String html = String(list_html) + String("\n");
     
-    html += "<body><h1>ESP32 Radio - SPIFFS card:</h1>" + String("\n");
+    html += "<body><h1>ESP32 Radio - SD card:</h1>" + String("\n");
        
     html += "<form action=\"/upload\" method=\"POST\" enctype=\"multipart/form-data\">";
     html += "<input type=\"file\" name=\"file\">";
@@ -5052,7 +5081,7 @@ void setup()
 
     listFiles("/", html);
     html += "</table></div>";
-    html += "<p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>" + String("\n");
+    html += "<p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>" + String("\n"); 
     html += "</body></html>";     
     request->send(200, "text/html", html);
     });
@@ -5061,7 +5090,7 @@ void setup()
     String filename = "/"; // Dodajemy sciezke do głownego folderu
       if (request->hasParam("filename", true)) {
         filename += request->getParam("filename", true)->value();
-        if (SPIFFS.remove(filename.c_str())) {
+        if (SD.remove(filename.c_str())) {
             Serial.println("Plik usunięty: " + filename);
         } else {
             Serial.println("Nie można usunąć pliku: " + filename);
@@ -5100,26 +5129,26 @@ void setup()
     server.on("/adc", HTTP_GET, [](AsyncWebServerRequest *request) {
     String html = String(adc_html);
     html.replace("%D10", String(keyboardButtonThreshold_Shift).c_str());
-     html.replace("%D11", String(keyboardButtonThreshold_Memory).c_str());
-    html.replace("%D12", String(keyboardButtonThreshold_Band).c_str());
-    html.replace("%D13", String(keyboardButtonThreshold_Auto).c_str());
-    html.replace("%D14", String(keyboardButtonThreshold_Scan).c_str());
-    html.replace("%D15", String(keyboardButtonThreshold_Mute).c_str());
-    html.replace("%D16", String(keyboardButtonThresholdTolerance).c_str());
+     html.replace("%D11", String(keyboardButtonThreshold_Memory).c_str()); 
+    html.replace("%D12", String(keyboardButtonThreshold_Band).c_str()); 
+    html.replace("%D13", String(keyboardButtonThreshold_Auto).c_str()); 
+    html.replace("%D14", String(keyboardButtonThreshold_Scan).c_str()); 
+    html.replace("%D15", String(keyboardButtonThreshold_Mute).c_str()); 
+    html.replace("%D16", String(keyboardButtonThresholdTolerance).c_str()); 
     html.replace("%D17", String(keyboardButtonNeutral).c_str());
-    html.replace("%D18", String(keyboardSampleDelay).c_str());
-    html.replace("%D0", String(keyboardButtonThreshold_0).c_str());
-    html.replace("%D1", String(keyboardButtonThreshold_1).c_str());
-    html.replace("%D2", String(keyboardButtonThreshold_2).c_str());
-    html.replace("%D3", String(keyboardButtonThreshold_3).c_str());
-    html.replace("%D4", String(keyboardButtonThreshold_4).c_str());
-    html.replace("%D5", String(keyboardButtonThreshold_5).c_str());
-    html.replace("%D6", String(keyboardButtonThreshold_6).c_str());
-    html.replace("%D7", String(keyboardButtonThreshold_7).c_str());
-    html.replace("%D8", String(keyboardButtonThreshold_8).c_str());
-    html.replace("%D9", String(keyboardButtonThreshold_9).c_str());
+    html.replace("%D18", String(keyboardSampleDelay).c_str()); 
+    html.replace("%D0", String(keyboardButtonThreshold_0).c_str()); 
+    html.replace("%D1", String(keyboardButtonThreshold_1).c_str()); 
+    html.replace("%D2", String(keyboardButtonThreshold_2).c_str()); 
+    html.replace("%D3", String(keyboardButtonThreshold_3).c_str()); 
+    html.replace("%D4", String(keyboardButtonThreshold_4).c_str()); 
+    html.replace("%D5", String(keyboardButtonThreshold_5).c_str()); 
+    html.replace("%D6", String(keyboardButtonThreshold_6).c_str()); 
+    html.replace("%D7", String(keyboardButtonThreshold_7).c_str()); 
+    html.replace("%D8", String(keyboardButtonThreshold_8).c_str()); 
+    html.replace("%D9", String(keyboardButtonThreshold_9).c_str()); 
     //html.replace("%D10", String(keyboardButtonThreshold_Shift).c_str());
-    //Serial.print("keyboardButtonThreshold_Shift: "); Serial.println(String(keyboardButtonThreshold_Shift));
+    //Serial.print("keyboardButtonThreshold_Shift: "); Serial.println(String(keyboardButtonThreshold_Shift)); 
    
 
     request->send(200, "text/html", html);
@@ -5153,41 +5182,41 @@ void setup()
     }
     if (request->hasParam("keyboardSampleDelay", true)) {
       keyboardSampleDelay = request->getParam("keyboardSampleDelay", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_0", true)) {
       keyboardButtonThreshold_0 = request->getParam("keyboardButtonThreshold_0", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_1", true)) {
       keyboardButtonThreshold_1 = request->getParam("keyboardButtonThreshold_1", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_2", true)) {
       keyboardButtonThreshold_2 = request->getParam("keyboardButtonThreshold_2", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_3", true)) {
       keyboardButtonThreshold_3 = request->getParam("keyboardButtonThreshold_3", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_4", true)) {
       keyboardButtonThreshold_4 = request->getParam("keyboardButtonThreshold_4", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_5", true)) {
       keyboardButtonThreshold_5 = request->getParam("keyboardButtonThreshold_5", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_6", true)) {
       keyboardButtonThreshold_6 = request->getParam("keyboardButtonThreshold_6", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_7", true)) {
       keyboardButtonThreshold_7 = request->getParam("keyboardButtonThreshold_7", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_8", true)) {
       keyboardButtonThreshold_8 = request->getParam("keyboardButtonThreshold_8", true)->value().toInt();
-    }
+    } 
     if (request->hasParam("keyboardButtonThreshold_9", true)) {
       keyboardButtonThreshold_9 = request->getParam("keyboardButtonThreshold_9", true)->value().toInt();
     }
 
     request->send(200, "text/html", "<h1>ADC Keyboard Thresholds Updated!</h1><a href='/menu'>Go Back</a>");
     
-    saveAdcConfig();
+    saveAdcConfig(); 
     
     //ODswiezenie ekranu OLED po zmianach konfiguracji
     ir_code = rcCmdBack; // Udajemy kod pilota Back
@@ -5242,7 +5271,7 @@ void setup()
     }  
 
     request->send(200, "text/html", "<h1>Configuration Updated!</h1><a href='/menu'>Go Back</a>");
-    saveConfig();
+    saveConfig(); 
     
     //ODswiezenie ekranu OLED po zmianach konfiguracji
     ir_code = rcCmdBack; // Udajemy komendy pilota
@@ -5267,38 +5296,37 @@ void setup()
     if (debugKeyboard == 0)
     {
       ir_code = rcCmdBack; // Przypisujemy kod polecenia z pilota
-      bit_count = 32; // ustawiamy informacje, ze mamy pelen kod NEC do analizy
+      bit_count = 32; // ustawiamy informacje, ze mamy pelen kod NEC do analizy 
       calcNec();  // przeliczamy kod pilota na kod oryginalny pełen kod NEC  
     }
         
     });
 
-    server.on("/view", HTTP_GET, [](AsyncWebServerRequest *request)
+    server.on("/view", HTTP_GET, [](AsyncWebServerRequest *request) 
     {
       String filename = "/";
-      if (request->hasParam("filename"))
+      if (request->hasParam("filename")) 
       {
         filename += request->getParam("filename")->value();
         //String fullPath = "/" + filename;
 
-        File file = SPIFFS.open(filename);
-        if (file)
+        File file = SD.open(filename);
+        if (file) 
         {
-            String content = "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"></head><body>";
-            content += "<h1>File content: " + filename + "</h1><pre>";
+            String content = "<html><body><h1>File content: " + filename + "</h1><pre>";
             while (file.available()) {
                 content += (char)file.read();
             }
             content += "</pre><a href=\"/list\">Back to list</a></body></html>";
             request->send(200, "text/html", content);
             file.close();
-          }
-          else
+          } 
+          else 
           {
             request->send(404, "text/plain", "File not found");
           }
-        }
-        else
+        } 
+        else 
         {
         request->send(400, "text/plain", "No file name");
       }
@@ -5307,13 +5335,13 @@ void setup()
     server.on("/viewweb", HTTP_GET, [](AsyncWebServerRequest *request)  
     {
       String filename = "/";
-      if (request->hasParam("filename"))
+      if (request->hasParam("filename")) 
       {
         filename += request->getParam("filename")->value();
         //String fullPath = "/" + filename;
 
-        File file = SPIFFS.open(filename);
-        if (file)
+        File file = SD.open(filename);
+        if (file) 
         {
             String content; //= "<html><body>";
             while (file.available()) {
@@ -5322,13 +5350,13 @@ void setup()
             //content +="</body></html>";
             request->send(200, "text/html", content);
             file.close();
-          }
-          else
+          } 
+          else 
           {
             request->send(404, "text/plain", "File not found");
           }
-        }
-        else
+        } 
+        else 
         {
         request->send(400, "text/plain", "No file name");
       }
@@ -5337,13 +5365,13 @@ void setup()
     server.on("/viewweb2", HTTP_GET, [](AsyncWebServerRequest *request)  
     {
       String filename = "/";
-      if (request->hasParam("filename"))
+      if (request->hasParam("filename")) 
       {
         filename += request->getParam("filename")->value();
         //String fullPath = "/" + filename;
 
-        File file = SPIFFS.open(filename);
-        if (file)
+        File file = SD.open(filename);
+        if (file) 
         {
             String content; //= "<html><body>";
             while (file.available()) {
@@ -5353,18 +5381,18 @@ void setup()
             //content +="</body></html>";
             request->send(200, "text/html", content);
             file.close();
-          }
-          else
+          } 
+          else 
           {
             request->send(404, "text/plain", "File not found");
           }
-        }
-        else
+        } 
+        else 
         {
         request->send(400, "text/plain", "No file name");
       }
     });
- 
+  
 
     server.on("/download", HTTP_ANY, [](AsyncWebServerRequest *request) {
     if (request->hasParam("filename")) {
@@ -5374,8 +5402,8 @@ void setup()
 
         Serial.println("Pobieranie pliku: " + fullPath);
 
-        File file = SPIFFS.open(fullPath);
-        //Serial.println("SPIFFS: " + SPIFFS + "/" + filename);
+        File file = SD.open(fullPath);
+        //Serial.println("SD: " + SD + "/" + filename);
 
         if (file) {
             if (file.size() > 0) {
@@ -5384,10 +5412,10 @@ void setup()
                 //request->send(file, "application/octet-stream" , true); //"application/octet-stream");
                 //request->send(200, "application/octet-stream", file.readString());
                 
-                request->send(SPIFFS, fullPath, "application/octet-stream", true); //"application/octet-stream");"text/plain"
+                request->send(SD, fullPath, "application/octet-stream", true); //"application/octet-stream");"text/plain"
                 
                 
-                //request->send(SPIFFS, "/remote.txt", "application/octet-stream", true);
+                //request->send(SD, "/remote.txt", "application/octet-stream", true); 
                 file.close();
                 Serial.println("Plik wysłany: " + filename);
             } else {
@@ -5416,10 +5444,10 @@ void setup()
     Serial.print("Upload File Name: ");
     Serial.println(filename);
 
-    // Otwórz plik na karcie SPIFFS
+    // Otwórz plik na karcie SD
     static File file; // Użyj statycznej zmiennej do otwierania pliku tylko raz
     if (index == 0) {
-        file = SPIFFS.open(filename, FILE_WRITE);
+        file = SD.open(filename, FILE_WRITE);
         if (!file) {
             Serial.println("Failed to open file for writing");
             request->send(500, "text/plain", "Failed to open file for writing");
@@ -5450,14 +5478,14 @@ void setup()
 
     server.on("/volumeUp", HTTP_GET, [](AsyncWebServerRequest *request)
     {
-      volumeUp();
-      request->send(200, "text/html", index_html, processor);
+      volumeUp(); 
+      request->send_P(200, "text/html", index_html, processor);
     });
 
     server.on("/volumeDown", HTTP_GET, [](AsyncWebServerRequest *request)
     {
-      volumeDown();
-      request->send(200, "text/html", index_html, processor);
+      volumeDown(); 
+      request->send_P(200, "text/html", index_html, processor);
     });
 
     server.on("/stationUp", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -5465,7 +5493,7 @@ void setup()
       station_nr++;
       if (station_nr > stationsCount) {station_nr = 1;}
       changeStation();
-      request->send(200, "text/html", index_html, processor);
+      request->send_P(200, "text/html", index_html, processor);
     });
 
     server.on("/stationDown", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -5473,12 +5501,12 @@ void setup()
       station_nr--;
       if (station_nr < 1) {station_nr = stationsCount;}
       changeStation();
-      request->send(200, "text/html", index_html, processor);
+      request->send_P(200, "text/html", index_html, processor);
     });
 
 
     // Send a GET request to <ESP_IP>/slider?value=<inputMessage>
-    server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request)
+    server.on("/update", HTTP_GET, [] (AsyncWebServerRequest *request) 
     {
       String inputMessage1;
       String inputMessage2;
@@ -5492,9 +5520,9 @@ void setup()
         sliderValue = inputMessage1;
         volumeValue = sliderValue.toInt();
         
-        if (volumeValue < 1)
+        if (volumeValue < 1) 
         { volumeMute = true;}
-        else if (volumeValue > 0)
+        else if (volumeValue > 0) 
         {volumeMute = false;}
         audio.setVolume(volumeValue);
         volumeDisplay();
@@ -5507,7 +5535,7 @@ void setup()
         Serial.println(inputMessage2);
                
         ir_code = rcCmdOk; // Przypisujemy kod polecenia z pilota
-        bit_count = 32; // ustawiamy informacje, ze mamy pelen kod NEC do analizy
+        bit_count = 32; // ustawiamy informacje, ze mamy pelen kod NEC do analizy 
         calcNec();  // przeliczamy kod pilota na kod oryginalny pełen kod NEC    
                        
           //changeStation();
@@ -5529,7 +5557,7 @@ void setup()
         clearFlags();
 
         ir_code = rcCmdOk; // Przypisujemy kod polecenia z pilota
-        bit_count = 32; // ustawiamy informacje, ze mamy pelen kod NEC do analizy
+        bit_count = 32; // ustawiamy informacje, ze mamy pelen kod NEC do analizy 
         calcNec();  // przeliczamy kod pilota na kod oryginalny pełen kod NEC    
         station_nr = 1;
 
@@ -5540,7 +5568,7 @@ void setup()
         url2play = inputMessage4.c_str();
         urlToPlay = true;
       }
-      else
+      else 
       {
         inputMessage1 = "No message sent";
         inputMessage2 = "No message sent";
@@ -5559,7 +5587,7 @@ void setup()
     server.begin();
     currentSelection = station_nr - 1; // ustawiamy stacje na liscie na obecnie odtwarzaczną przy starcie radia
     firstVisibleLine = currentSelection + 1; // pierwsza widoczna lina to grająca stacja przy starcie
-    if (currentSelection + 1 >= stationsCount - 1)
+    if (currentSelection + 1 >= stationsCount - 1) 
     {
      firstVisibleLine = currentSelection - 3;
     }
@@ -5572,8 +5600,8 @@ void setup()
     if (MDNS.begin(hostname)) { Serial.println("mDNS rozpoczęte. HOSTNAME.local' w przeglądarce"); }
 
 
-  }
-  else
+  } 
+  else 
   {
     Serial.println("Brak połączenia z siecią WiFi");  // W przypadku braku polaczenia wifi - wyslij komunikat na serial
     u8g2.clearBuffer();
@@ -5585,9 +5613,9 @@ void setup()
     while(true)
     { wifiManager.process(); } // Nieskonczona petla z procesowaniem Wifi aby nie przejsc do ekranu radia gdy nie ma Wifi
   }
- 
+  
   //int kbd = xTaskCreatePinnedToCore(handleKeyboard, "handle_Keyboard", 2000, NULL, 1, NULL, 1);
-  //if(kbd) {Serial.println("Task kbd created...");}
+  //if(kbd) {Serial.println("Task kbd created...");} 
   //else {Serial.printf("Couldn't create task %i", kbd);}
 
   /*
@@ -5607,7 +5635,7 @@ void setup()
 
 }
 //#######################################################################################  LOOP  ####################################################################################### //
-void loop()
+void loop() 
 {
   runTime1 = esp_timer_get_time();
   wifiManager.process();  // WiFi manager
@@ -5618,21 +5646,21 @@ void loop()
 
   /* -------------- KLAWIATURA --------------*/
   /* Odczyt stanu klawiatura ADC pod GPIO 9 */
- 
-  if ((millis() - keyboardLastSampleTime >= keyboardSampleDelay) && (adcKeyboardEnabled)) // Sprawdzenie ADC - klawiatury
+  
+  if ((millis() - keyboardLastSampleTime >= keyboardSampleDelay) && (adcKeyboardEnabled)) // Sprawdzenie ADC - klawiatury 
   {
     keyboardLastSampleTime = millis();
     handleKeyboard();
   }
- 
+  
   if ((displayActive == true) && (displayDimmerActive == true) && (fwupd == false)) {displayDimmer(0);}  
 
   // Obsługa enkodera 2
-  if (encoderFunctionOrder == 0) { handleEncoder2VolumeStationsClick(); }
+  if (encoderFunctionOrder == 0) { handleEncoder2VolumeStationsClick(); } 
   else if (encoderFunctionOrder == 1) { handleEncoder2StationsVolumeClick(); }
 
- 
- 
+  
+  
  /*---------------------  FUNKCJA BACK / POWROTU ze wszystkich opcji Menu, Ustawien, itd ---------------------*/
 
   if ((fwupd == false) && (displayActive) && (millis() - displayStartTime >= displayTimeout))  // Przywracanie poprzedniej zawartości ekranu po 6 sekundach
@@ -5650,22 +5678,22 @@ void loop()
 
     if (volumeBufferValue != volumeValue)
     {
-      saveVolumeOnSPIFFS();
+      saveVolumeOnSD();
       volumeBufferValue = volumeValue;
     }
     
     // Jezeli nastapiła zmiana numeru stacji to wczytujemy nową stacje
     if ((rcInputDigitsMenuEnable == true) && (station_nr != stationFromBuffer))   
     {
-     changeStation();
+     changeStation(); 
     }
-    displayDimmer(0);
+    displayDimmer(0); 
     clearFlags();
     displayRadio();
     u8g2.sendBuffer();
   }
 
- /*---------------------  PILOT IR - NEC  ---------------------*/
+ /*---------------------  PILOT IR - NEC  ---------------------*/ 
 
   if (bit_count == 32) // sprawdzamy czy odczytalismy w przerwaniu pełne 32 bity kodu IR NEC
   {
@@ -5689,7 +5717,7 @@ void loop()
       ir_code = ADDR << 8 | CMD;      // Łączymy ADDR i CMD w jedną zmienną 0x ADR CMD
 
       // Info o przebiegach czasowytch kodu pilota IR
-      Serial.print("debug-- puls 9ms:");
+      Serial.print("debug-- puls 9ms:"); 
       Serial.print(pulse_duration_9ms);
       Serial.print("  4.5ms:");
       Serial.print(pulse_duration_4_5ms);
@@ -5700,7 +5728,7 @@ void loop()
 
 
       fwupd = false;        // Kasujemy flagę aktulizacji OTA gdyby była ustawiona
-      displayActive = true; // jesli odbierzemy kod z pilota to uatywnij wyswietlacz i wyłacz przyciemnienie OLEDa
+      //displayActive = true; // jesli odbierzemy kod z pilota to uatywnij wyswietlacz i wyłacz przyciemnienie OLEDa
       //displayDimmer(0); // jesli odbierzemy kod z pilota to wyłaczamy przyciemnienie wyswietlacza OLED
       displayPowerSave(0);
       
@@ -5711,7 +5739,7 @@ void loop()
         if (bankMenuEnable == true)
         {
           bank_nr++;
-          if (bank_nr > 16)
+          if (bank_nr > 16) 
           {
             bank_nr = 1;
           }
@@ -5723,9 +5751,9 @@ void loop()
           if (toneSelect == 2) {toneMidValue++;}
           if (toneSelect == 3) {toneLowValue++;}
           
-          if (toneHiValue > 12) {toneHiValue = 12;}
-          if (toneMidValue > 12) {toneMidValue = 12;}
-          if (toneLowValue > 12) {toneLowValue = 12;}
+          if (toneHiValue > 6) {toneHiValue = 6;}
+          if (toneMidValue > 6) {toneMidValue = 6;}
+          if (toneLowValue > 6) {toneLowValue = 6;}
           displayEqualizer();
         }     
         else
@@ -5742,7 +5770,7 @@ void loop()
         if (bankMenuEnable == true)
         {
           bank_nr--;
-          if (bank_nr < 1)
+          if (bank_nr < 1) 
           {
             bank_nr = 16;
           }
@@ -5785,7 +5813,7 @@ void loop()
         station_nr--;
         if (station_nr < 1) { station_nr = stationsCount; } // jesli dojdziemy do początku listy stacji to przewijamy na koniec
         
-        scrollUp();
+        scrollUp(); 
         displayStations();
       }
       else if ((ir_code == rcCmdArrowDown) && (volumeSet == false) && (equalizerMenuEnable == true))
@@ -5803,13 +5831,13 @@ void loop()
         station_nr = currentSelection + 1;
         
         station_nr++;
-        if (station_nr > stationsCount)
-          {
+        if (station_nr > stationsCount) 
+	      {
           station_nr = 1;//stationsCount;
         }
         
         Serial.println(station_nr);
-        scrollDown();
+        scrollDown(); 
         displayStations();
       }    
       else if (ir_code == rcCmdOk)
@@ -5817,22 +5845,22 @@ void loop()
         if (bankMenuEnable == true)
         {
           station_nr = 1;
-          fetchStationsFromServer(); // Ładujemy stacje z karty lub serwera
+          fetchStationsFromServer(); // Ładujemy stacje z karty lub serwera 
           bankMenuEnable = false;
         }  
-        if (equalizerMenuEnable == true) { saveEqualizerOnSPIFFS();}    // zapis ustawien equalizera
-        //if (volumeSet == true) { saveVolumeOnSPIFFS();}                 // zapis ustawien głośnosci po nacisnięciu OK, wyłaczony aby można było przełączyć stacje na www bez czekania
+        if (equalizerMenuEnable == true) { saveEqualizerOnSD();}    // zapis ustawien equalizera
+        //if (volumeSet == true) { saveVolumeOnSD();}                 // zapis ustawien głośnosci po nacisnięciu OK, wyłaczony aby można było przełączyć stacje na www bez czekania
         //if ((equalizerMenuEnable == false) && (volumeSet == false)) // jesli nie zapisywaliśmy equlizer i glonosci to wywolujemy ponizsze funkcje
-        if ((equalizerMenuEnable == false)) // jesli nie zapisywaliśmy equlizer
+        if ((equalizerMenuEnable == false)) // jesli nie zapisywaliśmy equlizer 
         {
-          changeStation();
+          changeStation(); 
           clearFlags();                                             // Czyscimy wszystkie flagi przebywania w różnych menu
           displayRadio();
           u8g2.sendBuffer();
         }
         equalizerMenuEnable = false; // Kasujemy flage ustawiania equalizera
         volumeSet = false; // Kasujemy flage ustawiania głośnosci
-      }
+      } 
       else if (ir_code == rcCmdKey0) {rcInputKey(0);}
       else if (ir_code == rcCmdKey1) {rcInputKey(1);}     
       else if (ir_code == rcCmdKey2) {rcInputKey(2);}     
@@ -5843,14 +5871,14 @@ void loop()
       else if (ir_code == rcCmdKey7) {rcInputKey(7);}     
       else if (ir_code == rcCmdKey8) {rcInputKey(8);}     
       else if (ir_code == rcCmdKey9) {rcInputKey(9);}
-      else if (ir_code == rcCmdBack)
+      else if (ir_code == rcCmdBack) 
       {  
         displayDimmer(0);
         clearFlags();   // Zerujemy wszystkie flagi
         displayRadio(); // Ładujemy erkran radia
         u8g2.sendBuffer(); // Wysyłamy bufor na wyswietlacz
       }
-      else if (ir_code == rcCmdMute)
+      else if (ir_code == rcCmdMute) 
       {
         volumeMute = !volumeMute;
         if (volumeMute == true)
@@ -5866,9 +5894,9 @@ void loop()
       else if (ir_code == rcCmdDirect) // Przycisk Direct -> Menu Bank - udpate GitHub, Menu Equalizer - reset wartosci, Radio Display - fnkcja przyciemniania ekranu
       {
         if ((bankMenuEnable == true) && (equalizerMenuEnable == false))// flage można zmienic tylko bedąc w menu wyboru banku
-        {
-          bankNetworkUpdate = !bankNetworkUpdate; // zmiana flagi czy aktualizujemy bank z sieci czy karty SPIFFS
-          bankMenuDisplay();
+        { 
+          bankNetworkUpdate = !bankNetworkUpdate; // zmiana flagi czy aktualizujemy bank z sieci czy karty SD
+          bankMenuDisplay(); 
         }
         if ((bankMenuEnable == false) && (equalizerMenuEnable == true))
         {
@@ -5878,17 +5906,17 @@ void loop()
           displayEqualizer();
         }
         if ((bankMenuEnable == false) && (equalizerMenuEnable == false) && (volumeSet == false))
-        {
+        { 
           
           displayDimmer(!displayDimmerActive); // Dimmer OLED
           Serial.println("Właczono display Dimmer rcCmdDirect");
           /*
-          if (displayDimmerActive == 1)
+          if (displayDimmerActive == 1) 
           {       
             displayDimmer(0);
             Serial.println("Właczono display Dimmer 0");
           }
-          else if (displayDimmerActive == 0)
+          else if (displayDimmerActive == 0) 
           {       
             displayDimmer(1);
             Serial.println("Właczono display Dimmer 1");
@@ -5900,7 +5928,7 @@ void loop()
           //u8g2.sendF("ca", 0xC7, displayBrightness);
         }
       }      
-      else if (ir_code == rcCmdSrc)
+      else if (ir_code == rcCmdSrc) 
       {
         displayMode++;
         if (displayMode > 2) {displayMode = 0;}
@@ -5909,7 +5937,7 @@ void loop()
         clearFlags();
         ActionNeedUpdateTime = true;
       }
-      else if (ir_code == rcCmdRed)
+      else if (ir_code == rcCmdRed) 
       {     
        voiceTime();
 
@@ -5925,7 +5953,7 @@ void loop()
        //displayAutoDimmerOn = !displayAutoDimmerOn;     
         
       }
-      else if (ir_code == rcCmdGreen)
+      else if (ir_code == rcCmdGreen) 
       {
         readRemoteConfig();
         assignRemoteCodes();
@@ -5956,12 +5984,12 @@ void loop()
         //rcPage++;
         //if (rcPage > 2) {rcPage = 0;}
       }   
-      else if (ir_code == rcCmdBankMinus)
+      else if (ir_code == rcCmdBankMinus) 
       {
         if (bankMenuEnable == true)
         {
           bank_nr--;
-          if (bank_nr < 1)
+          if (bank_nr < 1) 
           {
             bank_nr = 16;
           }
@@ -5969,12 +5997,12 @@ void loop()
         
         bankMenuDisplay();
       }
-      else if (ir_code == rcCmdBankPlus)
+      else if (ir_code == rcCmdBankPlus) 
       {
         if (bankMenuEnable == true)
         {
           bank_nr++;
-          if (bank_nr > 16)
+          if (bank_nr > 16) 
           {
             bank_nr = 1;
           }
@@ -6010,14 +6038,14 @@ void loop()
   }
 
   if ((audioInfoRefresh == true) && (displayActive == false)) // Zmiana streamtitle lub info bitrate, czestotliwość - wymaga odswiezenia displayRadio
-  {
+  { 
     audioInfoRefresh = false;
     displayRadio(); // Streamtitle, bitrate, wymaga odswiezenia
   }
- 
-  /*---------------------  Odswiezanie VU Meter, Time, Scroller, OLED, WiFi ver. 1 ---------------------*/
+  
+  /*---------------------  Odswiezanie VU Meter, Time, Scroller, OLED, WiFi ver. 1 ---------------------*/ 
  ///*
-  if ((millis() - scrollingStationStringTime > scrollingRefresh) && (displayActive == false))
+  if ((millis() - scrollingStationStringTime > scrollingRefresh) && (displayActive == false)) 
   {
     scrollingStationStringTime = millis();
     if (ActionNeedUpdateTime == true) // Aktualizacja zegara co 1 sek. + status audio buffora
@@ -6031,9 +6059,9 @@ void loop()
         voiceTime();
       }
 
-      if (debugAudioBuffor == true)
-      {
-        bufforAudioInfo();
+      if (debugAudioBuffor == true) 
+      { 
+        bufforAudioInfo(); 
         drawSignalPower(194,63,1); // Narysuj wskaznik zasiegu WiFi X,Y z wydrukiem na terminalu     
       }
       else
@@ -6051,7 +6079,7 @@ void loop()
       if (displayMode == 0) {u8g2.drawStr(0,48, "> MUTED <");}
       if (displayMode == 1) {u8g2.drawStr(200,47, "> MUTED <");}
       u8g2.setDrawColor(1);
-    }
+    } 
     
     //Rysujmey wskaznik VU esli flaga rysowania aktywna, mute = 0 i tylko trybie displayMode 0
     if (vuMeterOn == true && displayActive == false && displayMode == 0 && volumeMute == false){vuMeter();}
@@ -6070,3 +6098,5 @@ void loop()
   //runTime2 = esp_timer_get_time();
   //runTime = runTime2 - runTime1;  
 }
+
+
