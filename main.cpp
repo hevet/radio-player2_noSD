@@ -20,12 +20,13 @@
 #include <ESPAsyncWebServer.h> // Bliblioteka asyncrhionicznego serwera web
 #include <AsyncTCP.h>          // Bliblioteka TCP dla serwera web
 #include <Update.h>            // Blibioteka dla aktulizacji OTA
-#include <ESPmDNS.h>
+#include <ESPmDNS.h>           // Blibioteka mDNS dla ESP
 #include "font.h"              // Plik nagłówkowy z czcionką
 
 // Deklaracja wersji oprogramowania i nazwy hosta widocznego w routerze oraz na ekranie OLED i stronie www
-#define softwareRev "v3.17.77"  // Wersja oprogramowania radia
-#define hostname "esp32radio"  // Definicja nazwy hosta widoczna na zewnątrz
+#define softwareRev "v3.17.90"  // Wersja oprogramowania radia
+#define hostname "esp32radio"   // Definicja nazwy hosta widoczna na zewnątrz
+
 
 // Definicja pinow dla wyswietlacza OLED 
 #define SPI_MOSI_OLED 39  // Pin MOSI (Master Out Slave In) dla interfejsu SPI OLED
@@ -81,7 +82,7 @@ int8_t recoveryMode = 0; // Zmienna do przechowywania pozycji enkodera
 #define STATIONS_URL16 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank16.txt"  // Adres URL do pliku z listą stacji radiowych
 
 
-// ############### DEFINICJA DLA PILOTa IR w standardzie NEC ############### //
+// ############### DEFINICJA DLA PILOTa IR w standardzie NEC - przeniesiona do pliku txt na karcie ############### //
 
 uint16_t rcCmdVolumeUp = 0;   // Głosnosc +
 uint16_t rcCmdVolumeDown = 0; // Głośnosc -
@@ -121,7 +122,6 @@ int bankFromBuffer = 0;         // Numer aktualnie wybranego banku stacji z list
 int CLK_state2;                 // Aktualny stan CLK enkodera lewego
 int prev_CLK_state2;            // Poprzedni stan CLK enkodera lewego
 int stationsCount = 0;          // Aktualna liczba przechowywanych stacji w tablicy
-//int fileFromBuffer = 0;       // Numer aktualnie wybranego pliku do przywrócenia na ekran po bezczynności
 uint8_t volumeValue = 10;       // Wartość głośności, domyślnie ustawiona na 10
 uint8_t maxVolume = 21;
 bool maxVolumeExt =  false;     // 0(false) -  zakres standardowy Volume 1-21 , 1 (true) - zakres rozszerzony 0-42
@@ -133,7 +133,7 @@ int buttonShortPressTime2 = 500;       // Czas rekacji na krótkie nacisniecie e
 int buttonSuperLongPressTime2 = 4000;  // Czas reakcji na super długie nacisniecie enkoder 2
 uint8_t stationNameLenghtCut = 24;     // 24-> 25 znakow, 25-> 26 znaków, zmienna określająca jak długa nazwę ma nazwa stacji w plikach Bankow liczone od 0- wartosci ustalonej
 
-// ---- Voice promt of Time every hour / Głosowe odtwarzanie czasu co godzinę ---- //
+// ---- Głosowe odtwarzanie czasu co godzinę ---- //
 bool voiceTimePlay = false; 
 bool voiceTimePlayActionTaken = false;
 bool timeVoiceInfoEveryHour = true;
@@ -163,18 +163,17 @@ uint8_t rcInputDigit1 = 0xFF;      // Pierwsza cyfra w przy wprowadzaniu numeru 
 uint8_t rcInputDigit2 = 0xFF;      // Druga cyfra w przy wprowadzaniu numeru stacji z pilota
 
 
-// ---- Config ---- // - prototype function for config storage
+// ---- Zmienne konfiguracji ---- //
 uint16_t configArray[16] = { 0 };
 uint8_t rcPage = 0;
-uint16_t configRemoteArray[30] = { 0 };  // Tablica przechowująca kody pilota podczas odczytu z pliku
-uint16_t configAdcArray[20] = { 0 };
-bool configExist = true;
+uint16_t configRemoteArray[30] = { 0 };   // Tablica przechowująca kody pilota podczas odczytu z pliku
+uint16_t configAdcArray[20] = { 0 };      // Tablica przechowująca wartosci ADC dla przyciskow klawiatury
+bool configExist = true;                  // Flaga okreslajaca czy istnieje plik konfiguracji    
 
 //const int maxVisibleLines = 5;  // Maksymalna liczba widocznych linii na ekranie OLED
 bool encoderButton2 = false;      // Flaga określająca, czy przycisk enkodera 2 został wciśnięty
 bool encoderFunctionOrder = true; // Flaga okreslająca kolejność funkcji enkodera 2
 bool displayActive = false;       // Flaga określająca, czy wyświetlacz jest aktywny
-//bool isPlaying = false;           // Flaga określająca, czy obecnie trwa odtwarzanie
 bool mp3 = false;                 // Flaga określająca, czy aktualny plik audio jest w formacie MP3
 bool flac = false;                // Flaga określająca, czy aktualny plik audio jest w formacie FLAC
 bool aac = false;                 // Flaga określająca, czy aktualny plik audio jest w formacie AAC
@@ -183,7 +182,6 @@ bool opus = false;                // Flaga określająca, czy aktualny plik audi
 bool id3tag = false;              // Flaga określająca, czy plik audio posiada dane ID3
 bool timeDisplay = true;          // Flaga określająca kiedy pokazać czas na wyświetlaczu, domyślnie od razu po starcie
 bool listedStations = false;      // Flaga określająca czy na ekranie jest pokazana lista stacji do wyboru
-//bool menuEnable = false;          // Flaga określająca czy na ekranie można wyświetlić menu
 bool bankMenuEnable = false;      // Flaga określająca czy na ekranie jest wyświetlone menu wyboru banku
 bool bitratePresent = false;      // Flaga określająca, czy na serial terminalu pojawiła się informacja o bitrate - jako ostatnia dana spływajaca z info
 bool bankNetworkUpdate = false;   // Flaga wyboru aktualizacji banku z sieci lub karty SPIFFS - True aktulizacja z NETu
@@ -198,7 +196,6 @@ bool audioInfoRefresh = false;    // Flaga wymuszjąca wymagane odswiezenie ze w
 bool noSPIFFScard = false;              // flaga ustawiana przy braku wykrycia karty SPIFFS
 bool resumePlay = false;            // Flaga wymaganego uruchomienia odtwarzania po zakonczeniu komunikatu głosowego
 bool fwupd = false;               // Flaga blokujaca main loop podczas aktualizacji oprogramowania
-//bool displayBufforSendRquest = false;
 bool configIrExist = false;       // Flaga informująca o istnieniu poprawnej konfiguracji pilota IR
 bool wsAudioRefresh = false;      // Flaga informujaca o potrzebie odswiezenia Station Text za pomoca Web Sokcet
 
@@ -244,26 +241,17 @@ unsigned long runTime2 = 0;
 
 
 String stationStringScroll = "";     // Zmienna przechowująca tekst do przewijania na ekranie
-String stationStringScrollWeb = ""; // Zmienna przechowująca tekst do przewijania w przegladarce
-//String stationStringWs = "";
-//String directories[MAX_FILES];       // Tablica z indeksami i ścieżkami katalogów
-//String currentDirectory = "/music";  // Ścieżka bieżącego katalogu
 String stationName;                  // Nazwa aktualnie wybranej stacji radiowej
 String stationString;                // Dodatkowe dane stacji radiowej (jeśli istnieją)
+String stationStringWeb;             // Dodatkowe dane stacji radiowej (jeśli istnieją)
 String bitrateString;                // Zmienna przechowująca informację o bitrate
 String sampleRateString;             // Zmienna przechowująca informację o sample rate
 String bitsPerSampleString;          // Zmienna przechowująca informację o liczbie bitów na próbkę
-//String artistString;                 // Zmienna przechowująca informację o wykonawcy
-//String titleString;                  // Zmienna przechowująca informację o tytule utworu
-//String fileNameString;               // Zmienna przechowująca informację o nazwie pliku
-//String folderNameString;             // Zmienna przechowująca informację o nazwie folderu
-//String PlayedFolderName;             // Nazwa aktualnie odtwarzanego folderu
 String currentIP;
 String stationNameStream;           // Nazwa stacji wyciągnieta z danych wysylanych przez stream
 
 String header;                      // Zmienna dla serwera www
 String sliderValue = "0";
-//String html = "";
 String url2play = "";
 
 
@@ -307,24 +295,9 @@ const char index_html[] PROGMEM = R"rawliteral(
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ESP32 Web Radio</title>
   <style>
-  @keyframes scroll-left {
-    0%% {
-      transform: translateX(100%%);
-    }
-    100%% {
-      transform: translateX(-100%%);
-    }
-  }
-  
-  .scroll-animate 
-  {
-    animation: scroll-left 30s linear infinite;
-    position: relative;
-  }
-
     html {font-family: Arial; display: inline-block; text-align: center;}
     h2 {font-size: 1.3rem;}
-    p {font-size: 1.1rem;}
+    p {font-size: 0.95rem;}
     table {border: 1px solid black; border-collapse: collapse; margin: 0px 0px;}
     td, th {font-size: 0.8rem; border: 1px solid gray; border-collapse: collapse;}
     td:hover {font-weight:bold;}
@@ -354,21 +327,23 @@ const char index_html[] PROGMEM = R"rawliteral(
   <h2>ESP32 Web Radio</h2>
   
   <div style="display: inline-block; padding: 5px; border: 2px solid #4CAF50; border-radius: 15px; background-color: #4a4a4a; font-size: 1.45rem; 
-  color: #AAA; width: 360px; text-align: center; white-space: nowrap; box-shadow: 0 0 20px #4CAF50;  ">
+  color: #AAA; width: 345px; text-align: center; white-space: nowrap; box-shadow: 0 0 20px #4CAF50;  ">
     
     <div style="margin-bottom: 10px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; -webkit-text-stroke: 0.3px black; text-stroke: 0.3px black;">
-      <span id="textStationName"><b>%STATIONNAMEVALUE%</b></span>
+      <span id="textStationName"><b>STATIONNAME</b></span>
     </div>
     
-    <div style="width: 345px; overflow: hidden; margin-bottom: 10px;">
-      <div id="stationTextDiv" style="display: inline-block; white-space: nowrap; position: relative; font-size: 1.0rem; color: #999; margin-bottom: 10px;">
-        <span id="stationText">%STATIONTEXT%</span>
+    <div style="width: 345px; margin-bottom: 10px;">
+      <div id="stationTextDiv" style="display: block; text-overflow: ellipsis; white-space: normal; font-size: 1.0rem; color: #999; margin-bottom: 10px; text-align: center; align-items: center; height: 4.2em; justify-content: center; overflow: hidden; line-height: 1.4em;">
+        <span id="stationText">STATIONTEXT</span>
       </div>
     </div>
+    
+    <div style="height: 1px; background-color: #4CAF50; margin: 5px 0;"></div>
 
     <div style="display: flex; justify-content: center; gap: 200px; font-size: 1.0rem; color: #999;">
-      <div><span id="stationNumber">Station: %STATIONNUMBER%</span></div>
-      <div><span id="bankValue">Bank: %BANKVALUE%</span></div>
+      <div><span id="bankValue">Bank: --</span></div>
+      <div><span id="stationNumber">Station: --</span></div>
     </div>
 
   </div>
@@ -377,41 +352,31 @@ const char index_html[] PROGMEM = R"rawliteral(
   <button class="button" onClick="displayMode()">OLED Display Mode</button>
   
         
-  <script>
+ <script>
+
+  var websocket;
+
   function updateSliderVolume(element) 
   {
     var sliderValue = document.getElementById("volumeSlider").value;
     document.getElementById("textSliderValue").innerText = sliderValue;
-    console.log(sliderValue);
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", "/update?volume="+sliderValue, true);
-    xhr.send();
+
+    if (websocket && websocket.readyState === WebSocket.OPEN) 
+    {
+      websocket.send("volume:" + sliderValue);
+    } 
+    else 
+    {
+      console.warn("WebSocket niepołączony");
+    }
   }
 
-  function volume(x) 
-  {
-    var xhr = new XMLHttpRequest();
-    xhr.open("GET", "/volume" + x, true);
-    xhr.send();
-    document.location.reload();
-  }
-
-  //function station(x) 
-  //{
-  //  var xhr = new XMLHttpRequest();
-  //  xhr.open("GET", "/station" + x, true);
-  //  xhr.send();
-  //  //document.location.reload();
-  //}
-  
   function stationLoad(x) 
   {
     connectWebSocket();
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/update?station=" + x, false);
     xhr.send();
-    //document.location.reload();
-    //window.location.href=window.location.href();
   }
   
   function bankLoad(x) 
@@ -420,131 +385,79 @@ const char index_html[] PROGMEM = R"rawliteral(
     var xhr = new XMLHttpRequest();
     xhr.open("GET", "/update?bank=" + x, true);
     xhr.send();
-    //document.location.reload();
-    //window.location.href=window.location.href();
-  }
+   }
  
   function displayMode() 
   {
     fetch("/displayMode")
   }
   
-  function checkStationTextLength() 
-  {
-      const stationTextElement = document.getElementById("stationText");
-      const stationTextDiv = document.getElementById("stationTextDiv");
-      const maxLength = 43; // Określa maksymalną liczbę znaków w okienku DIV
-
-      if (stationTextElement.innerText.length > maxLength) {
-        // Jeśli tekst jest długi, dodajemy animacje przewijania
-        stationTextDiv.classList.add("scroll-animate");
-      } 
-      else 
-      {
-        // Jeśli tekst jest krótki, usuwamy animacje
-        stationTextDiv.classList.remove("scroll-animate");
-      }
-      
-      //alert('Szerokość 1: ' + stationTextElement.innerText.length + '\nmaxLength: ' + maxLength);
-  }
-
-    // Uruchom funkcji przy załadowaniu strony
-    window.onload = checkStationTextLength;
-
-
+  
   function connectWebSocket() 
   {
-    let socket = new WebSocket('ws://' + window.location.hostname + '/ws');
+    websocket = new WebSocket('ws://' + window.location.hostname + '/ws');
 
-    socket.onopen = function () 
+    websocket.onopen = function () 
     {
         console.log("WebSocket polaczony");
     };
     
-    socket.onclose = function (event) 
+    websocket.onclose = function (event) 
     {
         console.log("WebSocket zamkniety. Proba ponownego polaczenia za 3 sekundy...");
         setTimeout(connectWebSocket, 3000); // próba ponownego połączenia
     };
 
-    socket.onerror = function (error) 
+    websocket.onerror = function (error) 
     {
         console.error("Blad WebSocket: ", error);
-        socket.close(); // zamyka połączenie, by wywołać reconnect
+        websocket.close(); // zamyka połączenie, by wywołać reconnect
     };
-  
-  }
-
-  let previousBankValue = null;  // Zmienna do przechowywania poprzedniej wartości banku aby zapobiec petli odsweizania
-  
-  var socket = new WebSocket('ws://' + window.location.hostname + '/ws');
     
-  socket.onmessage = function(event) 
-  {
-    if (event.data === "reload") 
+    websocket.onmessage = function(event) 
     {
-      location.reload();
-    }  
-    
-    if (event.data.startsWith("volume:")) 
-    {
-      var vol = parseInt(event.data.split(":")[1]);
-      document.getElementById("volumeSlider").value = vol;
-      document.getElementById("textSliderValue").innerText = vol;
-    }
-  
-    if (event.data.startsWith("station:")) 
-    {
-      var station = parseInt(event.data.split(":")[1]);
-      highlightStation(station);
-      //document.getElementById('stationNumber').innerText = event.data.split(':')[1];
-      document.getElementById('stationNumber').innerText ='Station: ' + station; 
-    }
-    
-    if (event.data.startsWith("stationname:")) 
-    {
-      var value = event.data.split(":")[1];
-      document.getElementById("textStationName").innerHTML = `<b>${value}</b>`;
-      checkStationTextLength();
-    }  
-
-    if (event.data.startsWith("stationtext$")) 
-    {
-      var stationtext = event.data.split("$")[1];
-      document.getElementById("stationText").innerHTML = `${stationtext}`;
-      checkStationTextLength();
-    }  
-
-    //if (event.data.startsWith("volume:")) 
-    //{
-    //  var volume = event.data.split(":")[1];
-    //  document.getElementById("volumeSlider").innerText = volume;
-    //  document.getElementById("textSliderValue").innerText = volume;
-    //}  
-
-
-    if (event.data.startsWith("bank:")) 
-    {
-     var bankValue = parseInt(event.data.split(":")[1]);
-
-     if (bankValue !== previousBankValue) 
+      if (event.data === "reload") 
       {
-        document.getElementById('bankValue').innerText = 'Bank: ' + bankValue;
-        location.reload();  // Strona zostanie przeładowana
-        previousBankValue = bankValue;  // Zaktualizowanie poprzedniej wartości banku
+        location.reload();
+      }  
+      
+      if (event.data.startsWith("volume:")) 
+      {
+        var vol = parseInt(event.data.split(":")[1]);
+        document.getElementById("volumeSlider").value = vol;
+        document.getElementById("textSliderValue").innerText = vol;
       }
-    }    
+      
+      if (event.data.startsWith("station:")) 
+      {
+        var station = parseInt(event.data.split(":")[1]);
+        highlightStation(station);
+        //document.getElementById('stationNumber').innerText = event.data.split(':')[1];
+        document.getElementById('stationNumber').innerText ='Station: ' + station; 
+      }
+      
+      if (event.data.startsWith("stationname:")) 
+      {
+        var value = event.data.split(":")[1];
+        document.getElementById("textStationName").innerHTML = `<b>${value}</b>`;
+        //checkStationTextLength();
+      }  
 
+      if (event.data.startsWith("stationtext$")) 
+      {
+        var stationtext = event.data.split("$")[1];
+        document.getElementById("stationText").innerHTML = `${stationtext}`;
+        //checkStationTextLength();
+      }  
+
+      if (event.data.startsWith("bank:")) 
+      {
+        var bankValue = parseInt(event.data.split(":")[1]);
+        document.getElementById('bankValue').innerText = 'Bank: ' + bankValue;
+      }    
+    }
   };
-
-  // Funkcja do automatycznego zaznaczenia stacji po załadowaniu strony
-  //window.onload = function() 
-  //{
-  //  highlightStation(stationId);
-  //};
-
-
-
+  
   function highlightStation(stationId) 
   {
     // Usuń poprzednie zaznaczenia
@@ -582,7 +495,34 @@ const char index_html[] PROGMEM = R"rawliteral(
     }
   }
   
-  </script>
+
+  document.addEventListener("DOMContentLoaded", function () 
+  {
+    connectWebSocket(); // podlaczamy websockety
+
+    const slider = document.getElementById("volumeSlider");
+    slider.addEventListener("wheel", function (event) 
+    {
+      event.preventDefault(); // zapobiega przewijaniu strony
+
+      let currentValue = parseInt(slider.value);
+      const step = parseInt(slider.step) || 1;
+      const max = parseInt(slider.max);
+      const min = parseInt(slider.min);
+
+      if (event.deltaY < 0) {
+        // przewijanie w górę (zwiększ)
+        slider.value = Math.min(currentValue + step, max);
+      } else {
+        // przewijanie w dół (zmniejsz)
+        slider.value = Math.max(currentValue - step, min);
+      }
+
+      updateSliderVolume(slider); // wywołaj aktualizację
+    });
+  });
+
+ </script>
 
 )rawliteral";
 
@@ -634,7 +574,7 @@ const char config_html[] PROGMEM = R"rawliteral(
   </head>
 
 <body>
-<h1>ESP32 Radio - Settings</h1>
+<h2>ESP32 Radio - Settings</h2>
 <form action="/configupdate" method="POST">
 <table class="tableSettings">
 <tr><th>Setting</th><th>Value</th></tr>
@@ -656,7 +596,7 @@ const char config_html[] PROGMEM = R"rawliteral(
 
 <tr><td>OLED Power Save Mode</td><td><select name="displayPowerSaveEnabled"><option value="1"%S9>On</option><option value="0"%S10>Off</option></select></td></tr>
 <tr><td>OLED Power Save Time (1-600sek.)</td><td><input type="number" name="displayPowerSaveTime" min="1" max="600" value="%D9"></td></tr>
-<tr><td>Max Volume Extended [OFF] range 1-21 or [ON] range 1-42 </td><td><select name="maxVolumeExt"><option value="1"%11>On</option><option value="0"%S12>Off</option></select></td></tr>
+<tr><td>Max Volume Extended range -> 1-21 [Off], 1-42 [On]</td><td><select name="maxVolumeExt"><option value="1"%11>On</option><option value="0"%S12>Off</option></select></td></tr>
 </table>
 <input type="submit" value="Update">
 </form>
@@ -689,7 +629,7 @@ const char adc_html[] PROGMEM = R"rawliteral(
   </head>
 
 <body>
-<h1>ESP32 Radio - ADC Settings</h1>
+<h2>ESP32 Radio - ADC Settings</h2>
 <form action="/configadc" method="POST">
 <table class="tableSettings">
 <tr><th>Button</th><th>Value</th></tr>
@@ -772,19 +712,6 @@ const char menu_html[] PROGMEM = R"rawliteral(
   </body></html>
 
 )rawliteral";
-
-String processor(const String& var)
-{
-  //Serial.println(var);
-  //if (var == "SLIDERVALUE") {return String(volumeValue);}
-  
-  if (var == "STATIONNAMEVALUE") {return String(stationName.substring(0, stationNameLenghtCut));}
-  if (var == "BANKVALUE") {return String(bank_nr);}
-  if (var == "STATIONNUMBER") {return String(station_nr);}
-  if (var == "STATIONTEXT") {return String(stationStringScroll);}
-  return String();
-}
-
 
 char stations[MAX_STATIONS][STATION_NAME_LENGTH + 1];  // Tablica przechowująca linki do stacji radiowych (jedna na stację) +1 dla terminatora null
 
