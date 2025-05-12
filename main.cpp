@@ -1400,13 +1400,15 @@ void displayRadio()
       } // wstawiamy trzy kreseczki do wyswietlenia
       else // jezeli jest station name to prawiamy w "-- NAZWA --" i wysylamy do scrollera
       { 
-        stationStringScroll = ("-- " + stationNameStream + " --");
         stationStringWeb = ("-- " + stationNameStream + " --");
+        processText(stationNameStream);
+        stationStringScroll = ("-- " + stationNameStream + " --");
       }  // Zmienna stationStringScroller przyjmuje wartość stationNameStream
     }
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
       stationStringWeb = stationString;
+      fixBrokenUtf8(stationString);    // najpierw napraw "krzaki" typu ê -> ę
       processText(stationString);  // przetwarzamy polsie znaki
       stationStringScroll = stationString + "    "; // dodajemy separator do przewijanego tekstu jesli się nie miesci na ekranie
     }
@@ -1454,12 +1456,15 @@ void displayRadio()
       }      // wstawiamy trzy kreseczki do wyswietlenia
       else                                  // jezeli jest brak "stationString" ale jest "stationName" to składamy NR.Nazwa stacji z pliku, nadawany stationNameStream + separator przerwy
       { 
+        stationStringWeb = stationNameStream + "      ";
+        processText(stationNameStream);
         stationStringScroll = String(StationNrStr) + "." + stationName + ", " + stationNameStream + "      ";
       }
     }
     else //stationString != "" -> ma wartość
     {
       stationStringWeb = stationString;
+      fixBrokenUtf8(stationString);    // najpierw napraw "krzaki" typu ê -> ę
       processText(stationString);  // przetwarzamy polsie znaki
       stationStringScroll = String(StationNrStr) + "." + stationName + ", " + stationString + "      ";
       Serial.println(stationStringScroll);
@@ -1507,14 +1512,16 @@ void displayRadio()
       } // wstawiamy trzy kreseczki do wyswietlenia
       else // jezeli jest station name to oprawiamy w "-- NAZWA --" i wysylamy do scrollera
       { 
-        stationStringScroll = ("-- " + stationNameStream + " --");
         stationStringWeb = stationNameStream;
+        processText(stationNameStream);
+        stationStringScroll = ("-- " + stationNameStream + " --");
       }  // Zmienna stationStringScroller przyjmuje wartość stationNameStream
     }
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
       stationStringWeb = stationString;
-      processText(stationString);  // przetwarzamy polsie znaki
+      fixBrokenUtf8(stationString);    // najpierw napraw "krzaki" typu ê -> ę
+      processText(stationString);  // przetwarzamy polskie znaki
       stationStringScroll = stationString;
     }
 
