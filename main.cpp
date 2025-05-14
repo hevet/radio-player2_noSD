@@ -249,6 +249,7 @@ String sampleRateString;             // Zmienna przechowująca informację o sam
 String bitsPerSampleString;          // Zmienna przechowująca informację o liczbie bitów na próbkę
 String currentIP;
 String stationNameStream;           // Nazwa stacji wyciągnieta z danych wysylanych przez stream
+String stationNameStreamWeb;           // Nazwa stacji wyciągnieta z danych wysylanych przez stream
 
 String header;                      // Zmienna dla serwera www
 String sliderValue = "0";
@@ -1397,20 +1398,20 @@ void displayRadio()
       { 
         stationStringScroll = "---" ;
         stationStringWeb = "---" ;
-      } // wstawiamy trzy kreseczki do wyswietlenia
-      else // jezeli jest station name to prawiamy w "-- NAZWA --" i wysylamy do scrollera
+      } // wstawiamy trzy kreseczki do wyświetlenia
+      else // jeżeli jest station name to oprawiamy w "-- NAZWA --" i wysyłamy do scrollera
       { 
-        stationStringWeb = ("-- " + stationNameStream + " --");
         processText(stationNameStream);
         stationStringScroll = ("-- " + stationNameStream + " --");
+        stationStringWeb = ("-- " + stationNameStreamWeb + " --");
       }  // Zmienna stationStringScroller przyjmuje wartość stationNameStream
     }
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
       stationStringWeb = stationString;
       fixBrokenUtf8(stationString);    // najpierw napraw "krzaki" typu ê -> ę
-      processText(stationString);  // przetwarzamy polsie znaki
-      stationStringScroll = stationString + "    "; // dodajemy separator do przewijanego tekstu jesli się nie miesci na ekranie
+      processText(stationString);      // przetwarzamy polskie znaki
+      stationStringScroll = stationString + "    "; // dodajemy separator do przewijanego tekstu jeśli się nie mieści na ekranie
     }
               
     //Liczymy długość napisu stationStringScroll 
@@ -1449,16 +1450,16 @@ void displayRadio()
  
     if (stationString == "")                // Jeżeli stationString jest pusty i stacja go nie nadaje
     {   
-      if (stationNameStream == "")          // jezeli nie ma równiez stationName
+      if (stationNameStream == "")          // jeżeli nie ma również stationName
       {
         stationStringScroll = String(StationNrStr) + "." + stationName + ", ---" ;
         stationStringWeb = "---" ;
       }      // wstawiamy trzy kreseczki do wyswietlenia
       else                                  // jezeli jest brak "stationString" ale jest "stationName" to składamy NR.Nazwa stacji z pliku, nadawany stationNameStream + separator przerwy
       { 
-        stationStringWeb = stationNameStream + "      ";
         processText(stationNameStream);
         stationStringScroll = String(StationNrStr) + "." + stationName + ", " + stationNameStream + "      ";
+        stationStringWeb = stationNameStreamWeb;
       }
     }
     else //stationString != "" -> ma wartość
@@ -1505,16 +1506,16 @@ void displayRadio()
     // Jesli stacja nie nadaje stationString to podmieniamy pusty stationString na nazwę staji - stationNameStream
     if (stationString == "") // Jeżeli stationString jest pusty i stacja go nie nadaje
     {    
-      if (stationNameStream == "") // jezeli nie ma równiez stationName
+      if (stationNameStream == "") // jeżeli nie ma również stationName
       { 
         stationStringScroll = "---" ;
         stationStringWeb = "---" ;
-      } // wstawiamy trzy kreseczki do wyswietlenia
-      else // jezeli jest station name to oprawiamy w "-- NAZWA --" i wysylamy do scrollera
+      } // wstawiamy trzy kreseczki do wyświetlenia
+      else // jeżeli jest station name to oprawiamy w "-- NAZWA --" i wysyłamy do scrollera
       { 
-        stationStringWeb = stationNameStream;
         processText(stationNameStream);
         stationStringScroll = ("-- " + stationNameStream + " --");
+        stationStringWeb = ("-- " + stationNameStreamWeb + " --");
       }  // Zmienna stationStringScroller przyjmuje wartość stationNameStream
     }
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
@@ -1629,6 +1630,7 @@ void audio_showstation(const char *info) {
   Serial.print("station     ");
   Serial.println(info);
   stationNameStream = info;
+  stationNameStreamWeb = info;
   audioInfoRefresh = true;
   wsAudioRefresh = true;
 }
