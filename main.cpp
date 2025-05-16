@@ -24,7 +24,7 @@
 #include "font.h"              // Plik nagłówkowy z czcionką
 
 // Deklaracja wersji oprogramowania i nazwy hosta widocznego w routerze oraz na ekranie OLED i stronie www
-#define softwareRev "v3.17.90"  // Wersja oprogramowania radia
+#define softwareRev "v3.17.99"  // Wersja oprogramowania radia
 #define hostname "esp32radio"   // Definicja nazwy hosta widoczna na zewnątrz
 
 
@@ -327,8 +327,8 @@ const char index_html[] PROGMEM = R"rawliteral(
 <body>
   <h2>ESP32 Web Radio</h2>
   
-  <div style="display: inline-block; padding: 5px; border: 2px solid #4CAF50; border-radius: 15px; background-color: #4a4a4a; font-size: 1.45rem; 
-  color: #AAA; width: 345px; text-align: center; white-space: nowrap; box-shadow: 0 0 20px #4CAF50;  ">
+  <div id="display" style="display: inline-block; padding: 5px; border: 2px solid #4CAF50; border-radius: 15px; background-color: #4a4a4a; font-size: 1.45rem; 
+  color: #AAA; width: 345px; text-align: center; white-space: nowrap; box-shadow: 0 0 20px #4CAF50;" onClick="flashBackground(); displayMode()">
     
     <div style="margin-bottom: 10px; font-weight: bold; overflow: hidden; text-overflow: ellipsis; -webkit-text-stroke: 0.3px black; text-stroke: 0.3px black;">
       <span id="textStationName"><b>STATIONNAME</b></span>
@@ -342,17 +342,22 @@ const char index_html[] PROGMEM = R"rawliteral(
     
     <div style="height: 1px; background-color: #4CAF50; margin: 5px 0;"></div>
 
-    <div style="display: flex; justify-content: center; gap: 200px; font-size: 1.0rem; color: #999;">
+    <div style="display: flex; justify-content: center; gap: 25px; font-size: 1.0rem; color: #999;">
       <div><span id="bankValue">Bank: --</span></div>
+
+      <div style="display: flex; justify-content: center; gap: 10px; font-size: 0.65rem; color: #999;margin: 3px 0;">
+        <div><span id="samplerate">---.-kHz</span></div>
+        <div><span id="bitrate">---bit</span></div>
+        <div><span id="bitpersample">---kbps</span></div>
+        <div><span id="streamformat">----</span></div>
+      </div>
+
       <div><span id="stationNumber">Station: --</span></div>
     </div>
 
   </div>
   <br>
-  <br>
-  <button class="button" onClick="displayMode()">OLED Display Mode</button>
-  
-        
+  <br>       
  <script>
 
   var websocket;
@@ -455,8 +460,35 @@ const char index_html[] PROGMEM = R"rawliteral(
       {
         var bankValue = parseInt(event.data.split(":")[1]);
         document.getElementById('bankValue').innerText = 'Bank: ' + bankValue;
-      }    
+      } 
+
+      if (event.data.startsWith("samplerate:")) 
+      {
+        var samplerate = parseInt(event.data.split(":")[1]);
+        var formattedRate = (samplerate / 1000).toFixed(1) + "kHz";
+        document.getElementById('samplerate').innerText = formattedRate;
+      }
+      
+      if (event.data.startsWith("bitrate:")) 
+      {	
+        var bitrate = parseInt(event.data.split(":")[1]);
+        document.getElementById('bitrate').innerText = bitrate + 'kbps';
+      }  
+      
+      if (event.data.startsWith("bitpersample:")) 
+      {	
+        var bitpersample = parseInt(event.data.split(":")[1]);
+        document.getElementById('bitpersample').innerText = bitpersample + 'bit';
+      }  
+      
+      if (event.data.startsWith("streamformat:")) 
+      {	
+        var streamformat = event.data.split(":")[1];
+        document.getElementById('streamformat').innerText = streamformat;
+      }  
+
     }
+
   };
   
   function highlightStation(stationId) 
@@ -495,6 +527,27 @@ const char index_html[] PROGMEM = R"rawliteral(
     
     }
   }
+
+  function flashBackground() 
+	{
+	  const div = document.getElementById('display');
+	  const originalColor = div.style.backgroundColor;
+
+	  const textSpan = document.getElementById('textStationName');
+    const originalText = textSpan.innerText;
+
+
+	  div.style.backgroundColor = '#115522'; // kolor flash
+	  //textSpan.innerText = 'OLED Display Mode Changed';
+    textSpan.innerHTML = '<b>Display Mode Changed</b>';  
+
+	  setTimeout(() => 
+	  {
+		  div.style.backgroundColor = originalColor;
+		  //textSpan.innerText = originalText;
+      textSpan.innerHTML = `<b>${originalText}</b>`;
+	  }, 850); // czas w ms flasha
+	}
   
 
   document.addEventListener("DOMContentLoaded", function () 
@@ -522,6 +575,14 @@ const char index_html[] PROGMEM = R"rawliteral(
       updateSliderVolume(slider); // wywołaj aktualizację
     });
   });
+
+  window.onpageshow = function(event) 
+  {
+    if (event.persisted) 
+    {
+      window.location.reload();
+    }
+  };
 
  </script>
 
@@ -692,7 +753,7 @@ const char menu_html[] PROGMEM = R"rawliteral(
   <title>ESP32 Web Radio</title>
   <style>
     html {font-family: Arial; display: inline-block; text-align: center;}
-    h2 {font-size: 2.3rem;}
+    h2 {font-size: 1.3rem;}
     p {font-size: 1.1rem;}
     a {color: black; text-decoration: none;}
     body {max-width: 1380px; margin:0px auto; padding-bottom: 25px;}
@@ -709,7 +770,7 @@ const char menu_html[] PROGMEM = R"rawliteral(
   <br><button class="button" onclick="location.href='/list'">SPIFFS Explorer</button><br>
   <br><button class="button" onclick="location.href='/editor'">Memory Bank Editor</button><br>
   <br><button class="button" onclick="location.href='/config'">Configuration</button><br>
-  <br><p style='font-size: 0.8rem;'><a href='/'>Go Back</a></p>
+  <br><p style='font-size: 0.8rem;'><a href="#" onclick="window.location.replace('/')">Go Back</a></p>
   </body></html>
 
 )rawliteral";
@@ -952,6 +1013,52 @@ void wsRefreshPage() // Funkcja odswiezania strony za pomocą WebSocket
 {
   ws.textAll("reload");  // wyślij komunikat do wszystkich klientów
 }
+
+void wsStationChange(uint8_t stationId) 
+{
+  ws.textAll("stationname:" + String(stationName.substring(0, stationNameLenghtCut)));
+  ws.textAll("station:" + String(stationId));
+  ws.textAll("bank:" + String(bank_nr));
+  ws.textAll("volume:" + String(volumeValue)); 
+  
+  ws.textAll("bitrate:" + String(bitrateString)); 
+  ws.textAll("samplerate:" + String(sampleRateString)); 
+  ws.textAll("bitpersample:" + String(bitsPerSampleString)); 
+
+  if (mp3 == true) {ws.textAll("streamformat:MP3"); }
+  if (flac == true) {ws.textAll("streamformat:FLAC"); }
+  if (aac == true) {ws.textAll("streamformat:AAC"); }
+  if (vorbis == true) {ws.textAll("streamformat:VORBIS"); }
+  if (opus == true) {ws.textAll("streamformat:OPUS"); }
+}
+
+void wsStreamInfoRefresh()
+{ 
+  if (audio.isRunning() == true)
+  {
+    ws.textAll("stationtext$" + stationStringWeb);  // znak podziału to $ aby uniknac problemow z adresami http: separatorem |. Jako znak separacji uzyty $
+  }
+  else
+  {
+    ws.textAll("stationtext$... No audio stream ! ...");
+  }
+
+  ws.textAll("bitrate:" + String(bitrateString)); 
+  ws.textAll("samplerate:" + String(sampleRateString)); 
+  ws.textAll("bitpersample:" + String(bitsPerSampleString)); 
+
+  if (mp3 == true) {ws.textAll("streamformat:MP3"); }
+  if (flac == true) {ws.textAll("streamformat:FLAC"); }
+  if (aac == true) {ws.textAll("streamformat:AAC"); }
+  if (vorbis == true) {ws.textAll("streamformat:VORBIS"); }
+  if (opus == true) {ws.textAll("streamformat:OPUS"); }
+}
+
+void wsVolumeChange(int newVolume) 
+{
+  ws.textAll("volume:" + String(volumeValue)); // wysyła wartosc volume do wszystkich połączonych klientów
+}
+
 
 //Funkcja odpowiedzialna za zapisywanie informacji o stacji do pamięci EEPROM.
 void saveStationToPSRAM(const char *station) 
@@ -1364,7 +1471,7 @@ void displayRadio()
   if (displayMode == 0)
   {
     u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_fub14_tf);
+    u8g2.setFont(u8g2_font_10x20_tf);
     //stationName = stationName.substring(0, stationNameLenghtCut - 1);
     //u8g2.drawStr(24, 16, stationName.c_str());
     u8g2.drawStr(24, 16, stationName.substring(0, stationNameLenghtCut - 1).c_str());
@@ -1706,7 +1813,7 @@ void bankMenuDisplay()
   String bankNrStr = String(bank_nr);
   Serial.println("Wyświetlenie listy banków");
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(80, 33, "BANK ");
   u8g2.drawStr(145, 33, String(bank_nr).c_str());  // numer banku
   if ((bankNetworkUpdate == true) || (noSPIFFScard == true))
@@ -1724,7 +1831,7 @@ void bankMenuDisplay()
   }
   //else
   //{
-  //  u8g2.setFont(u8g2_font_fub14_tf);
+  //  u8g2.setFont(u8g2_font_10x20_tf);
   //  u8g2.drawStr(170, 33, "      ");
   //}
   u8g2.drawRFrame(21, 42, 214, 14, 3);                // Ramka do slidera bankow
@@ -1905,7 +2012,7 @@ void saveVolumeOnSPIFFS()
 {
  /*
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
   u8g2.drawStr(1, 33, "Saving volume settings"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
  */ 
@@ -2036,7 +2143,7 @@ void rcInputKey(uint8_t i)
 
     int y = 35;
     u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
+    u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
     u8g2.drawStr(65, y, "Station:"); 
     if (rcInputDigit1 != 0xFF)
     {u8g2.drawStr(153, y, String(rcInputDigit1).c_str());} 
@@ -2174,7 +2281,7 @@ void saveStationOnSPIFFS()
 void changeStation2() 
 {
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
@@ -2263,27 +2370,12 @@ void changeStation2()
   //screenRefreshTime = millis();
 }
 
-void wsStationChange(uint8_t stationId) 
-{
-  ws.textAll("stationname:" + String(stationName.substring(0, stationNameLenghtCut)));
-  ws.textAll("station:" + String(stationId));
-  ws.textAll("bank:" + String(bank_nr));
-  ws.textAll("volume:" + String(volumeValue)); 
-}
-
-void wsStreamInfoRefresh()
-{
-  //ws.textAll("stationtext$" + stationStringScroll);  // znak podziału to $ aby uniknac problemow z adresami http: separatorem |. Jako znak separacji uzyty $
-  ws.textAll("stationtext$" + stationStringWeb);  // znak podziału to $ aby uniknac problemow z adresami http: separatorem |. Jako znak separacji uzyty $
-}
-
-
 
 void changeStation() 
 {
   fwupd = false;
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
@@ -2524,7 +2616,7 @@ void updateTimer()
         u8g2.drawStr(xtime+7, 45, timeString);
         
         
-        u8g2.setFont(u8g2_font_fub14_tf); // 14x11
+        u8g2.setFont(u8g2_font_10x20_tf); // 14x11
         snprintf(timeString, sizeof(timeString), "%02d", timeinfo.tm_mday);
         u8g2.drawStr(203,17, timeString);
 
@@ -2604,7 +2696,7 @@ void updateTimer()
 void saveEqualizerOnSPIFFS() 
 {
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
   u8g2.drawStr(1, 33, "Saving equalizer settings"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
   
@@ -3073,10 +3165,6 @@ void handleKeyboard()
   // vTaskDelete(NULL);
 }
 
-void wsVolumeChange(int newVolume) 
-{
-  ws.textAll("volume:" + String(volumeValue)); // wysyła wartosc volume do wszystkich połączonych klientów
-}
 
 void volumeDisplay()
 {
@@ -3092,7 +3180,7 @@ void volumeDisplay()
   String volumeValueStr = String(volumeValue);  // Zamiana liczby VOLUME na ciąg znaków
   u8g2.clearBuffer();
   //u8g2.setFont(DotMatrix13pl);
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(65, 33, "VOLUME");
   u8g2.drawStr(163, 33, volumeValueStr.c_str());
 
@@ -3125,7 +3213,7 @@ void volumeDisplay()
   audio.setVolume(volumeValue);  // zakres 0...21
   String volumeValueStr = String(volumeValue);  // Zamiana liczby VOLUME na ciąg znaków
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(65, 33, "VOLUME");
   u8g2.drawStr(163, 33, volumeValueStr.c_str());
   u8g2.drawRFrame(21, 42, 214, 14, 3);             // Rysujemy ramke dla progress bara głosnosci
@@ -3153,7 +3241,7 @@ void volumeDown()
   audio.setVolume(volumeValue);  // zakres 0...21
   String volumeValueStr = String(volumeValue);  // Zamiana liczby VOLUME na ciąg znaków
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(65, 33, "VOLUME");
   u8g2.drawStr(163, 33, volumeValueStr.c_str());
   u8g2.drawRFrame(21, 42, 214, 14, 3);             // Rysujmey ramke dla progress bara głosnosci
@@ -3173,8 +3261,26 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     client->text("stationname:" + stationName.substring(0, stationNameLenghtCut));
     client->text("volume:" + String(volumeValue)); 
     client->text("bank:" + String(bank_nr));
-    //client->text("stationtext$" + stationStringScroll);
-    client->text("stationtext$" + stationStringWeb);
+    if (audio.isRunning() == true)
+    {
+       client->text("stationtext$" + stationStringWeb);
+    }
+    else
+    {
+     client->text("stationtext$... No audio stream ! ...");
+    }
+    
+    client->text("bitrate:" + String(bitrateString)); 
+    client->text("samplerate:" + String(sampleRateString)); 
+    client->text("bitpersample:" + String(bitsPerSampleString)); 
+
+  if (mp3 == true) {client->text("streamformat:MP3"); }
+  if (flac == true) {client->text("streamformat:FLAC"); }
+  if (aac == true) {client->text("streamformat:AAC"); }
+  if (vorbis == true) {client->text("streamformat:VORBIS"); }
+  if (opus == true) {client->text("streamformat:OPUS"); }
+
+
   } 
   else if (type == WS_EVT_DATA) 
   {
@@ -3193,7 +3299,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
       {
         int newVolume = msg.substring(7).toInt();
         volumeValue = newVolume;
-        volumeDisplay();   // wyswietle wartosci na OLED i aktualizacja okiektu audio volume
+        volumeDisplay();   // wyswietle wartosci na OLED i aktualizacja obiektu audio
       }
     }
   }
@@ -3340,7 +3446,7 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
 
   u8g2.setDrawColor(1);
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(60, 14, "EQUALIZER");
   //u8g2.drawStr(1, 14, "EQUALIZER");
   u8g2.setFont(spleen6x12PL);
@@ -3984,7 +4090,7 @@ void saveConfig()
 {
   /*
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
   u8g2.drawStr(1, 33, "Saving configuration"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
   */
@@ -4342,7 +4448,7 @@ void webUrlStationPlay()
   audio.stopSong();
 
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
@@ -4950,7 +5056,7 @@ void setup()
   //u8g2.sendF("ca", 0xC7, displayBrightness); // Ustawiamy jasność ekranu zgodnie ze zmienna displayBrightness
   
   u8g2.drawXBMP(0, 5, notes_width, notes_height, notes);  // obrazek - nutki
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(58, 17, "Internet Radio");
   u8g2.setFont(spleen6x12PL);
   u8g2.drawStr(226, 62, softwareRev);
@@ -5029,7 +5135,7 @@ void setup()
     Serial.println("Połączono z siecią WiFi");
     //u8g2.clearBuffer();
     //u8g2.setFont(DotMatrix13pl);
-    //u8g2.setFont(u8g2_font_fub14_tf);
+    //u8g2.setFont(u8g2_font_10x20_tf);
     //u8g2.drawStr(5, 32, "WiFi Connected");
     currentIP = WiFi.localIP().toString();  //konwersja IP na string
     u8g2.setFont(spleen6x12PL);
@@ -6240,50 +6346,13 @@ void loop()
       }
       else if (ir_code == rcCmdRed) 
       {     
-       voiceTime();
-
-       //u8g2.setPowerSave(1);
-       //u8g2.setContrast(128);
-
-       //saveConfig();
-       //{vuMeterOn = !vuMeterOn; displayRadio();}  
-       //u8g2.sendF("ca", 0xb9, 0x07);
-       //u8g2.sendF("ca", 0xb6, 0xFF);
-       //displayBasicInfo();
-       //debugAudioBuffor = !debugAudioBuffor;
-       //displayAutoDimmerOn = !displayAutoDimmerOn;     
+       voiceTime();  
         
       }
       else if (ir_code == rcCmdGreen) 
       {
-        readRemoteConfig();
-        assignRemoteCodes();
+        voiceTimeEn();
 
-        //voiceTimeEn();
-        
-        //u8g2.setPowerSave(0);
-        //u8g2.setContrast(255);
-        //readConfig();
-
-        //u8g2.sendF("ca", 0xc1, 0xff);
-        //u8g2.sendF("caaaaaaaaaaaaaaa", 0xb8, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4, 0xb4);
-
-        //saveEEPROM();
-        //displayConfig();
-         
-        //readPSRAMstations();
-         
-        //saveConfig();
-        //Serial.println("#### ODCZYT ####");
-        
-                 
-        //displayRadio();
-        //u8g2.sendBuffer();
-        //vuMeterMode = !vuMeterMode;} // Zmiana trybu VU meter z przerywanych kresek na ciągłe paski
-         
-        //readRcStoredCodes(rcPage); // Sprawdzenie komend pilota - funkcja testowa
-        //rcPage++;
-        //if (rcPage > 2) {rcPage = 0;}
       }   
       else if (ir_code == rcCmdBankMinus) 
       {
