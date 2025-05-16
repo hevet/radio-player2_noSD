@@ -2012,7 +2012,7 @@ void saveVolumeOnSPIFFS()
 {
  /*
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // czcionka 10x20
   u8g2.drawStr(1, 33, "Saving volume settings"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
  */ 
@@ -2143,7 +2143,7 @@ void rcInputKey(uint8_t i)
 
     int y = 35;
     u8g2.clearBuffer();
-    u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
+    u8g2.setFont(u8g2_font_10x20_tf); // czcionka 10x20
     u8g2.drawStr(65, y, "Station:"); 
     if (rcInputDigit1 != 0xFF)
     {u8g2.drawStr(153, y, String(rcInputDigit1).c_str());} 
@@ -2281,7 +2281,7 @@ void saveStationOnSPIFFS()
 void changeStation2() 
 {
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // czcionka 10x20
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
@@ -2375,7 +2375,7 @@ void changeStation()
 {
   fwupd = false;
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // czcionka 10x20
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
@@ -2696,7 +2696,7 @@ void updateTimer()
 void saveEqualizerOnSPIFFS() 
 {
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // czcionka 10x20
   u8g2.drawStr(1, 33, "Saving equalizer settings"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
   
@@ -4090,7 +4090,7 @@ void saveConfig()
 {
   /*
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // czcionka 10x20
   u8g2.drawStr(1, 33, "Saving configuration"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
   */
@@ -4448,7 +4448,7 @@ void webUrlStationPlay()
   audio.stopSong();
 
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_10x20_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_10x20_tf); // czcionka 10x20
   u8g2.drawStr(34, 33, "Loading stream..."); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
 
