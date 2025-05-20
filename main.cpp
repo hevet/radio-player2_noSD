@@ -96,8 +96,8 @@ uint16_t rcCmdSrc = 0;        // Przełączanie źródła radio, odtwarzacz
 uint16_t rcCmdMute = 0;       // Wyciszenie dzwieku
 uint16_t rcCmdAud = 0;        // Equalizer dzwieku
 uint16_t rcCmdDirect = 0;     // Jasność ekranu, dwa tryby 1/16 lub pełna jasność     
-uint16_t rcCmdBankMinus = 0;  // Wysweitla wybór banku
-uint16_t rcCmdBankPlus = 0;   // Wysweitla wybór banku
+uint16_t rcCmdBankMinus = 0;  // Wyswietla wybór banku
+uint16_t rcCmdBankPlus = 0;   // Wyswietla wybór banku
 uint16_t rcCmdRed = 0;        // Przełacza ładowanie banku kartaSPIFFS - serwer GitHub w menu bank
 uint16_t rcCmdGreen = 0;      // VU wyłaczony, VU tryb 1, VU tryb 2, zegar
 uint16_t rcCmdKey0 = 0;       // Przycisk "0"
@@ -190,11 +190,11 @@ bool volumeSet = false;           // Flaga wejscia menu regulacji głosnosci na 
 bool vuMeterOn = true;            // Flaga właczajaca wskazniki VU
 bool vuMeterMode = false;         // tryb rysowania vuMeter
 bool action3Taken = false;        // Flaga Akcji 3 - załaczenia VU
-bool ActionNeedUpdateTime = false;// Zmiena okresaljaca dla displayRadio potrzebe odczytu aktulizacji czasu
+bool ActionNeedUpdateTime = false;// Zmiena okreslajaca dla displayRadio potrzebe odczytu aktulizacji czasu
 bool debugAudioBuffor = false;    // Wyswietlanie bufora Audio
 bool audioInfoRefresh = false;    // Flaga wymuszjąca wymagane odswiezenie ze względu na zmianę info stream
-bool noSPIFFScard = false;              // flaga ustawiana przy braku wykrycia karty SPIFFS
-bool resumePlay = false;            // Flaga wymaganego uruchomienia odtwarzania po zakonczeniu komunikatu głosowego
+bool noSPIFFScard = false;        // flaga ustawiana przy braku wykrycia karty SPIFFS
+bool resumePlay = false;          // Flaga wymaganego uruchomienia odtwarzania po zakonczeniu komunikatu głosowego
 bool fwupd = false;               // Flaga blokujaca main loop podczas aktualizacji oprogramowania
 bool configIrExist = false;       // Flaga informująca o istnieniu poprawnej konfiguracji pilota IR
 bool wsAudioRefresh = false;      // Flaga informujaca o potrzebie odswiezenia Station Text za pomoca Web Sokcet
@@ -248,8 +248,8 @@ String bitrateString;                // Zmienna przechowująca informację o bit
 String sampleRateString;             // Zmienna przechowująca informację o sample rate
 String bitsPerSampleString;          // Zmienna przechowująca informację o liczbie bitów na próbkę
 String currentIP;
-String stationNameStream;           // Nazwa stacji wyciągnieta z danych wysylanych przez stream
-String stationNameStreamWeb;           // Nazwa stacji wyciągnieta z danych wysylanych przez stream
+String stationNameStream;            // Nazwa stacji wyciągnieta z danych wysylanych przez stream
+String stationNameStreamWeb;         // Nazwa stacji wyciągnieta z danych wysylanych przez stream
 
 String header;                      // Zmienna dla serwera www
 String sliderValue = "0";
@@ -1373,24 +1373,59 @@ void removeUtf8Bom(String &text) {
 void fixBrokenUtf8(String &text) {
 
   removeUtf8Bom(text);  // usuń BOM, jeśli jest obecny
-  // Napraw błędne znaki diakrytyczne (Windows-1252 interpretacja)
-  text.replace("ê", "ę");
-  text.replace("Ê", "Ę");
-  text.replace("æ", "ć");
-  text.replace("Æ", "Ć");
-  text.replace("œ", "ś");
-  text.replace("Œ", "Ś");
-  text.replace("¿", "ż");
-  text.replace("Ñ", "Ń");
-  text.replace("ñ", "ń");
-  text.replace("á", "ą");
-  text.replace("Á", "Ą");
-  text.replace("³", "ł");
-  text.replace("£", "Ł");
-  text.replace("ó", "ó");
-  text.replace("Ó", "Ó");
-  text.replace("Å‚", "ł");
+
+  // Zamień błędne znaki diakrytyczne na ich uproszczoną formę
+  text.replace("ê", "e");
+  text.replace("Ê", "E");
+  text.replace("æ", "c");
+  text.replace("Æ", "C");
+  text.replace("œ", "s");
+  text.replace("Œ", "S");
+  text.replace("¿", "z");
+  text.replace("Ñ", "N");
+  text.replace("ñ", "n");
+  text.replace("á", "a");
+  text.replace("Á", "A");
+  text.replace("à", "a");
+  text.replace("À", "A");
+  text.replace("â", "a");
+  text.replace("Â", "A");
+  text.replace("ä", "a");
+  text.replace("Ä", "A");
+  text.replace("é", "e");
+  text.replace("É", "E");
+  text.replace("è", "e");
+  text.replace("È", "E");
+  text.replace("ë", "e");
+  text.replace("Ë", "E");
+  text.replace("í", "i");
+  text.replace("Í", "I");
+  text.replace("î", "i");
+  text.replace("Î", "I");
+  text.replace("ï", "i");
+  text.replace("Ï", "I");
+  text.replace("ó", "o");
+  text.replace("Ó", "O");
+  text.replace("ô", "o");
+  text.replace("Ô", "O");
+  text.replace("ö", "o");
+  text.replace("Ö", "O");
+  text.replace("ú", "u");
+  text.replace("Ú", "U");
+  text.replace("ù", "u");
+  text.replace("Ù", "U");
+  text.replace("û", "u");
+  text.replace("Û", "U");
+  text.replace("ü", "u");
+  text.replace("Ü", "U");
+  text.replace("ý", "y");
+  text.replace("Ý", "Y");
+  text.replace("ÿ", "y");
+  text.replace("Å‚", "l");  // źle zdekodowane "ł"
+  text.replace("Å", "A");   // gdyby coś zostało zle
+  text.replace("Ã", "A");   // gdyby wyskoczyło np. Ã¡ zamiast á
 }
+
 
 
 // Funkcja przetwarza tekst, zamieniając polskie znaki diakrytyczne
@@ -1401,8 +1436,6 @@ void processText(String &text) {
         switch ((unsigned char)text[i + 1]) {
           case 0x93: text.setCharAt(i, 0xD3); break; // Ó
           case 0xB3: text.setCharAt(i, 0xF3); break; // ó
-          case 0xA1: text.setCharAt(i, 0xE1); break; // á
-          case 0xA9: text.setCharAt(i, 0xE9); break; // é
         }
         text.remove(i + 1, 1);
         break;
@@ -1439,7 +1472,7 @@ void processText(String &text) {
 }
 
 
-void calcNec() // Funkcja umozliwajaca przeliczanie odwrotne aby "udawac" przyciskami klawiatury komendy piltoa w standardzie NEC
+void calcNec() // Funkcja umozliwiajaca przeliczanie odwrotne aby "udawac" przyciskami klawiatury komendy pilota w standardzie NEC
 {
   //składamy kod pilota do postaci ADDR/CMD/CMD/ADDR aby miec 4 bajty
   uint8_t CMD = (ir_code >> 8) & 0xFF; 
