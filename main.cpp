@@ -1370,60 +1370,35 @@ void removeUtf8Bom(String &text) {
 }
 
 // Naprawa błędnie zdekodowanych znaków (krzaczki typu ê -> ę)
-void fixBrokenUtf8(String &text) {
+void transliterateToAscii(String &text) {
 
   removeUtf8Bom(text);  // usuń BOM, jeśli jest obecny
 
-  // Zamień błędne znaki diakrytyczne na ich uproszczoną formę
-  text.replace("ê", "e");
-  text.replace("Ê", "E");
-  text.replace("æ", "c");
-  text.replace("Æ", "C");
-  text.replace("œ", "s");
-  text.replace("Œ", "S");
-  text.replace("¿", "z");
-  text.replace("Ñ", "N");
-  text.replace("ñ", "n");
-  text.replace("á", "a");
-  text.replace("Á", "A");
-  text.replace("à", "a");
-  text.replace("À", "A");
-  text.replace("â", "a");
-  text.replace("Â", "A");
-  text.replace("ä", "a");
-  text.replace("Ä", "A");
-  text.replace("é", "e");
-  text.replace("É", "E");
-  text.replace("è", "e");
-  text.replace("È", "E");
-  text.replace("ë", "e");
-  text.replace("Ë", "E");
-  text.replace("í", "i");
-  text.replace("Í", "I");
-  text.replace("î", "i");
-  text.replace("Î", "I");
-  text.replace("ï", "i");
-  text.replace("Ï", "I");
-  text.replace("ó", "o");
-  text.replace("Ó", "O");
-  text.replace("ô", "o");
-  text.replace("Ô", "O");
-  text.replace("ö", "o");
-  text.replace("Ö", "O");
-  text.replace("ú", "u");
-  text.replace("Ú", "U");
-  text.replace("ù", "u");
-  text.replace("Ù", "U");
-  text.replace("û", "u");
-  text.replace("Û", "U");
-  text.replace("ü", "u");
-  text.replace("Ü", "U");
-  text.replace("ý", "y");
-  text.replace("Ý", "Y");
-  text.replace("ÿ", "y");
-  text.replace("Å‚", "l");  // źle zdekodowane "ł"
-  text.replace("Å", "A");   // gdyby coś zostało zle
-  text.replace("Ã", "A");   // gdyby wyskoczyło np. Ã¡ zamiast á
+  text.replace("á", "a"); text.replace("à", "a"); text.replace("â", "a"); text.replace("ä", "a"); text.replace("ã", "a"); text.replace("å", "a");
+  text.replace("Á", "A"); text.replace("À", "A"); text.replace("Â", "A"); text.replace("Ä", "A"); text.replace("Ã", "A"); text.replace("Å", "A");
+
+  text.replace("é", "e"); text.replace("è", "e"); text.replace("ê", "e"); text.replace("ë", "e");
+  text.replace("É", "E"); text.replace("È", "E"); text.replace("Ê", "E"); text.replace("Ë", "E");
+
+  text.replace("í", "i"); text.replace("ì", "i"); text.replace("î", "i"); text.replace("ï", "i");
+  text.replace("Í", "I"); text.replace("Ì", "I"); text.replace("Î", "I"); text.replace("Ï", "I");
+
+  text.replace("ó", "o"); text.replace("ò", "o"); text.replace("ô", "o"); text.replace("ö", "o"); text.replace("õ", "o"); text.replace("ø", "o");
+  text.replace("Ó", "O"); text.replace("Ò", "O"); text.replace("Ô", "O"); text.replace("Ö", "O"); text.replace("Õ", "O"); text.replace("Ø", "O");
+
+  text.replace("ú", "u"); text.replace("ù", "u"); text.replace("û", "u"); text.replace("ü", "u");
+  text.replace("Ú", "U"); text.replace("Ù", "U"); text.replace("Û", "U"); text.replace("Ü", "U");
+
+  text.replace("ñ", "n"); text.replace("Ñ", "N");
+  text.replace("ç", "c"); text.replace("Ç", "C");
+
+  text.replace("ß", "ss");
+  text.replace("ÿ", "y"); text.replace("Ÿ", "Y");
+
+  // Można też usunąć znaki nie-ASCII całkowicie, np.:
+  // for (int i = 0; i < text.length(); ++i) {
+  //   if ((unsigned char)text[i] > 127) text.remove(i--, 1);
+  // }
 }
 
 
@@ -1481,7 +1456,7 @@ void calcNec() // Funkcja umozliwiajaca przeliczanie odwrotne aby "udawac" przyc
   ir_code = (ir_code << 8) | CMD;
   ir_code = (ir_code << 8) | CMD;
   ir_code = (ir_code << 8) | ADDR;
-  ADDR = (ir_code >> 24) & 0xFF;           // Pierwszy bajt
+  ADDR = (ir_code >> 24) & 0xFF;          // Pierwszy bajt
   uint8_t IADDR = (ir_code >> 16) & 0xFF; // Drugi bajt (inwersja adresu)
   CMD = (ir_code >> 8) & 0xFF;            // Trzeci bajt (komenda)
   uint8_t ICMD = ir_code & 0xFF;          // Czwarty bajt (inwersja komendy)
@@ -1549,7 +1524,7 @@ void displayRadio()
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
       stationStringWeb = stationString;
-      fixBrokenUtf8(stationString);    // najpierw napraw "krzaki" typu ê -> ę
+      transliterateToAscii(stationString);    // najpierw napraw "krzaki" typu ê -> ę
       processText(stationString);      // przetwarzamy polskie znaki
       stationStringScroll = stationString + "    "; // dodajemy separator do przewijanego tekstu jeśli się nie mieści na ekranie
     }
@@ -1605,7 +1580,7 @@ void displayRadio()
     else //stationString != "" -> ma wartość
     {
       stationStringWeb = stationString;
-      fixBrokenUtf8(stationString);    // najpierw napraw "krzaki" typu ê -> ę
+      transliterateToAscii(stationString);    // najpierw napraw "krzaki" typu ê -> ę
       processText(stationString);  // przetwarzamy polsie znaki
       stationStringScroll = String(StationNrStr) + "." + stationName + ", " + stationString + "      ";
       Serial.println(stationStringScroll);
@@ -1661,7 +1636,7 @@ void displayRadio()
     else // Jezeli stationString zawiera dane to przypisujemy go do stationStringScroll do funkcji scrollera
     {
       stationStringWeb = stationString;
-      fixBrokenUtf8(stationString);    // najpierw napraw "krzaki" typu ê -> ę
+      transliterateToAscii(stationString);    // najpierw napraw "krzaki" typu ê -> ę
       processText(stationString);  // przetwarzamy polskie znaki
       stationStringScroll = stationString;
     }
