@@ -6219,9 +6219,9 @@ void loop()
           if (toneSelect == 2) {toneMidValue++;}
           if (toneSelect == 3) {toneLowValue++;}
           
-          if (toneHiValue > 6) {toneHiValue = 6;}
-          if (toneMidValue > 6) {toneMidValue = 6;}
-          if (toneLowValue > 6) {toneLowValue = 6;}
+          if (toneHiValue > 12) {toneHiValue = 6;}
+          if (toneMidValue > 12) {toneMidValue = 6;}
+          if (toneLowValue > 12) {toneLowValue = 6;}
           displayEqualizer();
         }     
         else
