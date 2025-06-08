@@ -209,12 +209,21 @@ unsigned long lastCheckTime = 0;      // No stream audio blink
 uint8_t stationNameStreamWidth = 0;   // Test pełnej nazwy stacji
 uint8_t x = 0;                             // Globalna zmienna pomocnicza 
 
+// ---- VU Meter ---- //
 unsigned long vuMeterTime;                 // Czas opznienia odswiezania wskaznikow VU w milisekundach
 uint8_t vuMeterL;                          // Wartosc VU dla L kanału zakres 0-255
 uint8_t vuMeterR;                          // Wartosc VU dla R kanału zakres 0-255
+uint8_t peakL = 0;                         // Wartosc peakHold dla kanalu lewego
+uint8_t peakR = 0;                         // Wartosc peakHold dla kanalu prawego
+uint8_t peakHoldTimeL = 0;                 // Licznik peakHold dla kanalu lewego
+uint8_t peakHoldTimeR = 0;                 // Licznik peakHold dla kanalu prawegoAdd commentMore actions
+const uint8_t peakHoldThreshold = 5;       // Liczba cykli zanim peak opadnie
+const uint8_t vuLy = 41;                   // Koordynata Y wskaznika VU L-lewego (wyzej)
+const uint8_t vuRy = 47;                   // Koordynata Y wskaznika VU R-prawego (nizej)
+
 
 unsigned long scrollingStationStringTime;  // Czas do odswiezania scorllingu
-uint8_t scrollingRefresh = 65;              // Czas w ms przewijania tekstu funkcji Scroller
+uint8_t scrollingRefresh = 50;              // Czas w ms przewijania tekstu funkcji Scroller
 
 uint8_t vuMeterRefreshCounterSet = 0;      // Mnoznik co ile petli loopRefreshTime ma byc odswiezony VU Meter
 uint8_t scrollerRefreshCounterSet = 0;     // Mnoznik co ile petli loopRefreshTime ma byc odswiezony i przewiniety o 1px Scroller
@@ -1265,6 +1274,8 @@ void transliterateToAscii(String &text) {
 
   text.replace("ß", "ss");
   text.replace("ÿ", "y"); text.replace("Ÿ", "Y");
+
+  text.replace("g̃", "g"); text.replace("G̃", "G");
 
   // Można też usunąć znaki nie-ASCII całkowicie, np.:
   // for (int i = 0; i < text.length(); ++i) {
@@ -3135,35 +3146,86 @@ void vuMeter()
   vuMeterR = min(audio.getVUlevel() & 0xFF, 250);  // wyciagamy ze zmiennej typu int16 kanał L
   vuMeterL = min(audio.getVUlevel() >> 8, 250);  // z wyzszej polowki wyciagamy kanal P
 
+  // Aktualizacja peak&hold dla Lewego kanału
+  if (vuMeterL >= peakL) 
+  {
+    peakL = vuMeterL;
+    peakHoldTimeL = 0;
+  } 
+  else 
+  {
+    if (peakHoldTimeL < peakHoldThreshold) 
+    {
+      peakHoldTimeL++;
+    } 
+    else 
+    {
+      if (peakL > 0) peakL--;
+    }
+  }
 
-  //vuMeterL = (vuMeterL >> 1); // dzielimy przez 2 -> przesuniecie o jeden bit abyz  255 -> 64
-  //vuMeterR = (vuMeterR >> 1);
+  // Aktualizacja peak&hold dla Prawego kanału
+  if (vuMeterR >= peakR) 
+  {
+    peakR = vuMeterR;
+    peakHoldTimeR = 0;
+  } 
+  else 
+  {
+    if (peakHoldTimeR < peakHoldThreshold) 
+    {
+      peakHoldTimeR++;
+    } 
+    else 
+    {
+      if (peakR > 0) peakR--;
+    }
+  }
 
   if (volumeMute == false)  
   {
     u8g2.setDrawColor(0);
-    u8g2.drawBox(0, 41, 253, 3);  //czyszczenie ekranu pod VU meter
-    u8g2.drawBox(0, 46, 253, 3);
+    u8g2.drawBox(0, vuLy, 256, 3);  //czyszczenie ekranu pod VU meter
+    u8g2.drawBox(0, vuRy, 256, 3);
     u8g2.setDrawColor(1);
+
+    // Biale pola pod literami L i R
+    u8g2.drawBox(0, vuLy - 3, 7, 7);  
+    u8g2.drawBox(0, vuRy - 3, 7, 7);  
+
+    // Rysujemy litery L i R
+    u8g2.setDrawColor(0);
+    u8g2.setFont(u8g2_font_04b_03_tr);
+    u8g2.drawStr(2, vuLy + 3, "L");
+    u8g2.drawStr(2, vuRy + 3, "R");
+    u8g2.setDrawColor(1);  // Przywracamy białe rysowanie
 
     if (vuMeterMode == 1)  // tryb 1 ciagle paski
     {
-    u8g2.setDrawColor(1);
-    u8g2.drawBox(0, 41, vuMeterL, 3);  // rysujemy kreseczki o dlugosci odpowiadajacej wartosci VU
-    u8g2.drawBox(0, 46, vuMeterR, 3);
+      u8g2.setDrawColor(1);
+      u8g2.drawBox(10, vuLy, vuMeterL, 2);  // rysujemy kreseczki o dlugosci odpowiadajacej wartosci VU
+      u8g2.drawBox(10, vuRy, vuMeterR, 2);
+
+      // Rysowanie peaków jako cienka kreska
+      u8g2.drawBox(9 + peakL, vuLy, 1, 2);
+      u8g2.drawBox(9 + peakR, vuRy, 1, 2);
     } 
     else  // vuMeterMode == 0  tryb podstawowy, kreseczki z przerwami
-    {
-    for (uint8_t vusize = 0; vusize < vuMeterL; vusize++) 
-    {
-      u8g2.drawBox(vusize, 41, 8, 2);
-      vusize = vusize + 8;
-    }
-    for (uint8_t vusize = 0; vusize < vuMeterR; vusize++) 
-    {
-      u8g2.drawBox(vusize, 46, 8, 2);
-      vusize = vusize + 8;
-    }
+    { 
+      for (uint8_t vusize = 0; vusize < vuMeterL; vusize++) 
+      {
+        if ((vusize % 9) < 8) u8g2.drawBox(9 + vusize, vuLy, 1, 2); // rysuj tylko 8 pikseli, potem 1px przerwy
+      }  
+	   
+      for (uint8_t vusize = 0; vusize < vuMeterR; vusize++) 
+      {
+        if ((vusize % 9) < 8) u8g2.drawBox(9 + vusize, vuRy, 1, 2); // rysuj tylko 8 pikseli, potem 1px przerwy
+      } 
+
+      // Peak - kreski w trybie przerywanym
+      u8g2.drawBox(9 + peakL, vuLy, 1, 2);
+      u8g2.drawBox(9 + peakR, vuRy, 1, 2);
+
     }
   }   
 }
@@ -5536,6 +5598,7 @@ void setup()
       displayActive = true;
       //clearFlags();
       fwupd = true;
+      u8g2.setDrawColor(1);
       u8g2.clearBuffer();
       u8g2.setFont(spleen6x12PL);     
       u8g2.setCursor(5, 12); u8g2.print("ESP-Radio, OTA Firwmare Update");
@@ -6404,12 +6467,14 @@ void loop()
       }
       else if (ir_code == rcCmdRed) 
       {     
-       voiceTime();   
+       //voiceTime();
+        vuMeterMode = !vuMeterMode;
         
       }
       else if (ir_code == rcCmdGreen) 
       {
-        voiceTimeEn();
+        //voiceTimeEn();
+        voiceTime();
               
       }   
       else if (ir_code == rcCmdBankMinus) 
@@ -6533,6 +6598,9 @@ void loop()
     u8g2.sendBuffer();  // rysujemy całą zawartosc ekranu.
    
   }
+
+
+
  
   //runTime2 = esp_timer_get_time();
   //runTime = runTime2 - runTime1;  
