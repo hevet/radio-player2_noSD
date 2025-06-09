@@ -24,7 +24,7 @@
 #include "font.h"              // Plik nagłówkowy z czcionką
 
 // Deklaracja wersji oprogramowania i nazwy hosta widocznego w routerze oraz na ekranie OLED i stronie www
-#define softwareRev "v3.18.05"  // Wersja oprogramowania radia
+#define softwareRev "v3.18.06"  // Wersja oprogramowania radia
 #define hostname "esp32radio"   // Definicja nazwy hosta widoczna na zewnątrz
 
 
@@ -1781,6 +1781,7 @@ void stationStringFormatting() // Funkcja aktualizujaca dla scorllera stationStr
       } 
       else // jezeli jest station name to prawiamy w "-- NAZWA --" i wysylamy do scrollera
       { 
+        transliterateToAscii(stationNameStream);
         processText(stationNameStream);
         stationStringScroll = ("-- " + stationNameStream + " --");
         stationStringWeb = ("-- " + stationNameStreamWeb + " --");
@@ -1821,6 +1822,7 @@ void stationStringFormatting() // Funkcja aktualizujaca dla scorllera stationStr
       }      // wstawiamy trzy kreseczki do wyswietlenia
       else                                  // jezeli jest brak "stationString" ale jest "stationName" to składamy NR.Nazwa stacji z pliku, nadawany stationNameStream + separator przerwy
       { 
+        transliterateToAscii(stationNameStream);
         processText(stationNameStream);
         stationStringScroll = String(StationNrStr) + "." + stationName + ", " + stationNameStream + "      ";
         stationStringWeb = stationNameStreamWeb;
@@ -1852,6 +1854,7 @@ void stationStringFormatting() // Funkcja aktualizujaca dla scorllera stationStr
       } // wstawiamy trzy kreseczki do wyswietlenia
       else // jezeli jest station name to oprawiamy w "-- NAZWA --" i wysylamy do scrollera
       { 
+        transliterateToAscii(stationNameStream);
         processText(stationNameStream);
         stationStringScroll = ("-- " + stationNameStream + " --");
         stationStringWeb = stationNameStreamWeb;
