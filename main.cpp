@@ -1277,6 +1277,15 @@ void transliterateToAscii(String &text) {
 
   text.replace("g̃", "g"); text.replace("G̃", "G");
 
+  text.replace("∏", "PI"); // zamiana znaku Pi na ASCII
+
+  text.replace("£", "Ł");
+
+  text.replace("¯", "Ż");
+
+
+
+
   // Można też usunąć znaki nie-ASCII całkowicie, np.:
   // for (int i = 0; i < text.length(); ++i) {
   //   if ((unsigned char)text[i] > 127) text.remove(i--, 1);
@@ -1571,7 +1580,7 @@ void fetchStationsFromServer()
   displayActive = true;
   u8g2.setFont(spleen6x12PL);
   u8g2.clearBuffer();
-  u8g2.setCursor(15, 23);
+  u8g2.setCursor(10, 23);
   u8g2.print("Loading BANK:" + String(bank_nr) + " stations from:");
   u8g2.sendBuffer();
   
@@ -1779,7 +1788,7 @@ void stationStringFormatting() // Funkcja aktualizujaca dla scorllera stationStr
         stationStringScroll = "---" ;
         stationStringWeb = "---" ;
       } 
-      else // jezeli jest station name to prawiamy w "-- NAZWA --" i wysylamy do scrollera
+      else // jezeli jest station name to Oprawiamy w "-- NAZWA --" i wysylamy do scrollera
       { 
         transliterateToAscii(stationNameStream);
         processText(stationNameStream);
@@ -3534,7 +3543,7 @@ void volumeDisplay()
   String volumeValueStr = String(volumeValue);  // Zamiana liczby VOLUME na ciąg znaków
   u8g2.clearBuffer();
   //u8g2.setFont(DotMatrix13pl);
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(65, 33, "VOLUME");
   u8g2.drawStr(163, 33, volumeValueStr.c_str());
 
@@ -3566,7 +3575,7 @@ void volumeUp()
   audio.setVolume(volumeValue);  // zakres 0...21
   String volumeValueStr = String(volumeValue);  // Zamiana liczby VOLUME na ciąg znaków
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(65, 33, "VOLUME");
   u8g2.drawStr(163, 33, volumeValueStr.c_str());
   u8g2.drawRFrame(21, 42, 214, 14, 3);             // Rysujmey ramke dla progress bara głosnosci
@@ -3593,7 +3602,7 @@ void volumeDown()
   audio.setVolume(volumeValue);  // zakres 0...21
   String volumeValueStr = String(volumeValue);  // Zamiana liczby VOLUME na ciąg znaków
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf);
+  u8g2.setFont(u8g2_font_10x20_tf);
   u8g2.drawStr(65, 33, "VOLUME");
   u8g2.drawStr(163, 33, volumeValueStr.c_str());
   u8g2.drawRFrame(21, 42, 214, 14, 3);             // Rysujmey ramke dla progress bara głosnosci
@@ -3875,7 +3884,7 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
     u8g2.setDrawColor(0); 
     u8g2.drawLine(xTone+57,yTone-5,xTone+208,yTone-5);
     //u8g2.drawLine(xTone+57,yTone-4,xTone+208,yTone-4);
-    if (toneHiValue >= 0){ u8g2.drawRBox((5 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneHiValue >= 0){ u8g2.drawRBox((4 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
     if (toneHiValue < 0) { u8g2.drawRBox((2 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
     u8g2.setDrawColor(1);
   }
@@ -3883,7 +3892,7 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
   {
     u8g2.drawLine(xTone+57,yTone-5,xTone+208,yTone-5);
     //u8g2.drawLine(xTone+57,yTone-4,xTone+208,yTone-4);
-    if (toneHiValue >= 0){ u8g2.drawRBox((5 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneHiValue >= 0){ u8g2.drawRBox((4 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
     if (toneHiValue < 0) { u8g2.drawRBox((2 * toneHiValue) + xTone + 138,yTone-7,10,5,1);}
     //u8g2.drawRBox((3 * toneHiValue) + xTone + 178,yTone-7,10,6,1);
   }
@@ -3904,15 +3913,15 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
     u8g2.setDrawColor(0);
     u8g2.drawLine(xTone+57,yTone-5,xTone + 208,yTone-5);
     //u8g2.drawLine(xTone+57,yTone-4,xTone + 208,yTone-4);
-    if (toneMidValue >= 0) { u8g2.drawRBox((5 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
-    if (toneMidValue < 0) { u8g2.drawRBox((2 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneMidValue >= 0) { u8g2.drawRBox((4 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneMidValue < 0)  { u8g2.drawRBox((2 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
     u8g2.setDrawColor(1);
   }
   else
   {
     u8g2.drawLine(xTone+57,yTone-5,xTone + 208,yTone-5);
     //u8g2.drawLine(xTone+57,yTone-4,xTone + 208,yTone-4);
-    if (toneMidValue >= 0) { u8g2.drawRBox((5 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
+    if (toneMidValue >= 0) { u8g2.drawRBox((4 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
     if (toneMidValue < 0)  { u8g2.drawRBox((2 * toneMidValue) + xTone + 138,yTone-7,10,5,1);}
     //u8g2.drawRBox((3 * toneMidValue) + xTone + 138,yTone-7,10,6,1);
   }
@@ -3933,7 +3942,7 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
     u8g2.setDrawColor(0);
     u8g2.drawLine(xTone + 57,yTone-5,xTone + 208,yTone-5);
    // u8g2.drawLine(xTone + 57,yTone-4,xTone + 208,yTone-4); 
-    if ( toneLowValue >= 0 ) { u8g2.drawRBox((5 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
+    if ( toneLowValue >= 0 ) { u8g2.drawRBox((4 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
     if ( toneLowValue < 0 )  { u8g2.drawRBox((2 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
     u8g2.setDrawColor(1);
   }
@@ -3941,7 +3950,7 @@ void displayEqualizer() // Funkcja rysująca menu 3-punktowego equalizera
   {
     u8g2.drawLine(xTone + 57,yTone-5,xTone + 208,yTone-5);
     //u8g2.drawLine(xTone + 57,yTone-4,xTone + 208,yTone-4);  
-    if ( toneLowValue >= 0 ) { u8g2.drawRBox((5 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
+    if ( toneLowValue >= 0 ) { u8g2.drawRBox((4 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
     if ( toneLowValue < 0 )  { u8g2.drawRBox((2 * toneLowValue) + xTone + 138,yTone-7,10,5,1);}
     //u8g2.drawRBox((3 * toneLowValue) + xTone + 138,yTone-7,10,6,1);
   }
@@ -6285,9 +6294,9 @@ void loop()
           if (toneSelect == 2) {toneMidValue++;}
           if (toneSelect == 3) {toneLowValue++;}
           
-          if (toneHiValue > 12) {toneHiValue = 12;}
-          if (toneMidValue > 12) {toneMidValue = 12;}
-          if (toneLowValue > 12) {toneLowValue = 12;}
+          if (toneHiValue > 15) {toneHiValue = 15;}
+          if (toneMidValue > 15) {toneMidValue = 15;}
+          if (toneLowValue > 15) {toneLowValue = 15;}
           displayEqualizer();
         }     
         else
