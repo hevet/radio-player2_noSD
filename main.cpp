@@ -29,29 +29,29 @@
 
 
 // Definicja pinow dla wyswietlacza OLED 
-#define SPI_MOSI_OLED 39  // Pin MOSI (Master Out Slave In) dla interfejsu SPI OLED
+#define SPI_MOSI_OLED 17  // Pin MOSI (Master Out Slave In) dla interfejsu SPI OLED
 #define SPI_MISO_OLED 0   // Pin MISO (Master In Slave Out) brak dla wyswietlacza OLED
-#define SPI_SCK_OLED 38   // Pin SCK (Serial Clock) dla interfejsu SPI OLED
-#define CS_OLED 42        // Pin CS (Chip Select) dla interfejsu OLED
-#define DC_OLED 40        // Pin DC (Data/Command) dla interfejsu OLED
-#define RESET_OLED 41     // Pin Reset dla interfejsu OLED
+#define SPI_SCK_OLED 12   // Pin SCK (Serial Clock) dla interfejsu SPI OLED
+#define CS_OLED 8         // Pin CS (Chip Select) dla interfejsu OLED
+#define DC_OLED 18        // Pin DC (Data/Command) dla interfejsu OLED
+#define RESET_OLED -1     // Pin Reset dla interfejsu OLED
 
 // Rozmiar wysweitlacz OLED (potrzebny do wyświetlania grafiki)
 #define SCREEN_WIDTH 256        // Szerokość ekranu w pikselach
 #define SCREEN_HEIGHT 64        // Wysokość ekranu w pikselach
 
 // Definicja pinow dla przetwornika PCM5102A
-#define I2S_DOUT 13             // Podłączenie do pinu DIN na DAC
-#define I2S_BCLK 12             // Podłączenie po pinu BCK na DAC
-#define I2S_LRC 14              // Podłączenie do pinu LCK na DAC
+#define I2S_DOUT 9             // Podłączenie do pinu DIN na DAC
+#define I2S_BCLK 3             // Podłączenie po pinu BCK na DAC
+#define I2S_LRC  1             // Podłączenie do pinu LCK na DAC
 
 // Enkoder 2 - uzywany dla radia
-#define CLK_PIN2 10             // Podłączenie z pinu 10 do CLK na enkoderze
-#define DT_PIN2 11              // Podłączenie z pinu 11 do DT na enkoderze lewym
-#define SW_PIN2 9               // Podłączenie z pinu 1 do SW na enkoderze lewym (przycisk)
+#define CLK_PIN2 2            // Podłączenie z pinu 10 do CLK na enkoderze
+#define DT_PIN2 10             // Podłączenie z pinu 11 do DT na enkoderze lewym
+#define SW_PIN2 39             // Podłączenie z pinu 1 do SW na enkoderze lewym (przycisk)
 
 // IR odbiornik podczerwieni 
-#define recv_pin 6
+#define recv_pin 4
 
 // definicja dlugosci ilosci stacji w banku, dlugosci nazwy stacji w PSRAM/EEPROM, maksymalnej ilosci plikow audio (odtwarzacz)
 #define MAX_STATIONS 99          // Maksymalna liczba stacji radiowych, które mogą być przechowywane w jednym banku
@@ -1120,8 +1120,8 @@ int bit_count = 0;          // Licznik bitów w odebranym kodzie
 const int LEAD_HIGH = 9050;         // 9 ms sygnał wysoki (początkowy)
 const int LEAD_LOW = 4500;          // 4,5 ms sygnał niski (początkowy)
 const int TOLERANCE = 150;          // Tolerancja (w mikrosekundach)
-const int HIGH_THRESHOLD = 1690;    // Sygnał "1"
-const int LOW_THRESHOLD = 600;      // Sygnał "0"
+const int HIGH_THRESHOLD = 1650;    // Sygnał "1"
+const int LOW_THRESHOLD = 530;      // Sygnał "0"
 
 bool data_start_detected = false;  // Flaga dla sygnału wstępnego
 bool rcInputDigitsMenuEnable = false;
@@ -6266,7 +6266,7 @@ void loop()
       Serial.print(pulse_duration_4_5ms);
       Serial.print("  1690us:");
       Serial.print(pulse_duration_1690us);
-      Serial.print("  690us:");
+      Serial.print("  560us:");
       Serial.println(pulse_duration_560us);
 
 
@@ -6527,7 +6527,7 @@ void loop()
       Serial.print(pulse_duration_4_5ms);
       Serial.print("  1690us:");
       Serial.print(pulse_duration_1690us);
-      Serial.print("  690us:");
+      Serial.print("  560us:");
       Serial.println(pulse_duration_560us);    
     }
     ir_code = 0;
