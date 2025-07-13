@@ -1,5 +1,5 @@
 // ############################################################################################### //
-// ESP32 Radio Evo3 - Interent Radio Player                                                        //
+// EVO Web Radio  - Interent Radio Player                                                        //
 // ############################################################################################### //
 // Robgold 2025                                                                                    //
 // Source -> https://github.com/dzikakuna/ESP32_radio_evo3/tree/main/src/ESP32_radio_v2_evo3.18    //
@@ -24,8 +24,8 @@
 #include "font.h"              // Plik nagłówkowy z czcionką
 
 // Deklaracja wersji oprogramowania i nazwy hosta widocznego w routerze oraz na ekranie OLED i stronie www
-#define softwareRev "v3.18.06"  // Wersja oprogramowania radia
-#define hostname "esp32radio"   // Definicja nazwy hosta widoczna na zewnątrz
+#define softwareRev "v3.18.12"  // Wersja oprogramowania radia
+#define hostname "evoradio"   // Definicja nazwy hosta widoczna na zewnątrz
 
 
 // Definicja pinow dla wyswietlacza OLED 
@@ -61,7 +61,7 @@
 
 #define STATIONS_URL1 "https://raw.githubusercontent.com/hevet/radio-player-stream/main/bank01.txt"       // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL2 "https://raw.githubusercontent.com/hevet/radio-player-stream/main/bank02.txt"       // Adres URL do pliku z listą stacji radiowych
-#define STATIONS_URL3 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank03.txt"   // Adres URL do pliku z listą stacji radiowych
+#define STATIONS_URL3 "https://raw.githubusercontent.com/hevet/ESP32_radio_streams/main/bank03.txt"       // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL4 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank04.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL5 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank05.txt"   // Adres URL do pliku z listą stacji radiowych
 #define STATIONS_URL6 "https://raw.githubusercontent.com/dzikakuna/ESP32_radio_streams/main/bank06.txt"   // Adres URL do pliku z listą stacji radiowych
@@ -116,21 +116,24 @@ int bankFromBuffer = 0;         // Numer aktualnie wybranego banku stacji z list
 int CLK_state2;                        // Aktualny stan CLK enkodera lewego
 int prev_CLK_state2;                   // Poprzedni stan CLK enkodera lewego
 int stationsCount = 0;                 // Aktualna liczba przechowywanych stacji w tablicy
-uint8_t volumeValue = 10;                  // Wartość głośności, domyślnie ustawiona na 10
+uint8_t volumeValue = 10;              // Wartość głośności, domyślnie ustawiona na 10
 uint8_t maxVolume = 21;
-bool maxVolumeExt =  false;                 // 0(false) -  zakres standardowy Volume 1-21 , 1 (true) - zakres rozszerzony 0-42
-uint8_t volumeBufferValue = 0;             // Wartość głośności, domyślnie ustawiona na 10
-int maxVisibleLines = 4;               // Maksymalna liczba widocznych linii na ekranie OLED
-int bitrateStringInt = 0;              // Deklaracja zmiennej do konwersji Bitrate string na wartosc Int aby podzelic bitrate przez 1000
-int buttonLongPressTime2 = 2000;       // Czas reakcji na długie nacisniecie enkoder 2
-int buttonShortPressTime2 = 500;       // Czas rekacjinna krótkie nacisniecie enkodera 2
-int buttonSuperLongPressTime2 = 4000;  // Czas reakcji na super długie nacisniecie enkoder 2
-uint8_t stationNameLenghtCut = 24;    // 24-> 25 znakow, 25-> 26 znaków, zmienna określająca jak długa nazwę ma nazwa stacji w plikach Bankow liczone od 0- wartosci ustalonej
-uint8_t yPositionDisplayScrollerMode0 = 33;
-uint8_t yPositionDisplayScrollerMode1 = 61;
-uint8_t yPositionDisplayScrollerMode2 = 25;
+bool maxVolumeExt =  false;                   // 0(false) -  zakres standardowy Volume 1-21 , 1 (true) - zakres rozszerzony 0-42
+uint8_t volumeBufferValue = 0;                // Wartość głośności, domyślnie ustawiona na 10
+int maxVisibleLines = 4;                      // Maksymalna liczba widocznych linii na ekranie OLED
+int bitrateStringInt = 0;                     // Deklaracja zmiennej do konwersji Bitrate string na wartosc Int aby podzelic bitrate przez 1000
+int buttonLongPressTime2 = 2000;              // Czas reakcji na długie nacisniecie enkoder 2
+int buttonShortPressTime2 = 500;              // Czas rekacjinna krótkie nacisniecie enkodera 2
+int buttonSuperLongPressTime2 = 4000;         // Czas reakcji na super długie nacisniecie enkoder 2
+uint8_t stationNameLenghtCut = 24;            // 24-> 25 znakow, 25-> 26 znaków, zmienna określająca jak długa nazwę ma nazwa stacji w plikach Bankow liczone od 0- wartosci ustalonej
+uint8_t yPositionDisplayScrollerMode0 = 33;   // Wysokosc (y) wyswietlania przewijanego/stalego tekstu stacji w danym trybie
+uint8_t yPositionDisplayScrollerMode1 = 61;   // Wysokosc (y) wyswietlania przewijanego/stalego tekstu stacji w danym trybie
+uint8_t yPositionDisplayScrollerMode2 = 25;   // Wysokosc (y) wyswietlania przewijanego/stalego tekstu stacji w danym trybie
 uint16_t stationStringScrollLength = 0;
 uint8_t maxStationVisibleStringScrollLength = 46;
+bool stationNameFromStream = 0;               // Flaga definiujaca czy wyswietlamy nazwe stacji z plikow Banku pamieci czy z informacji nadawanych w streamie
+
+
 // ---- Głosowe odtwarzanie czasu co godzinę ---- //
 bool voiceTimePlay = false; 
 bool voiceTimePlayActionTaken = false;
@@ -138,16 +141,16 @@ bool timeVoiceInfoEveryHour = true;
 
 
 // ---- Auto dimmer / auto przyciemnianie wyswietlacza ---- //
-uint8_t displayDimmerTimeCounter = 0;  // Zmienna inkrementowana w przerwaniu timera2 do przycimniania wyswietlacz
+uint8_t displayDimmerTimeCounter = 0;   // Zmienna inkrementowana w przerwaniu timera2 do przycimniania wyswietlacz
 uint8_t dimmerDisplayBrightness = 10;   // Wartość przyciemnienia wyswietlacza po czasie niekatywnosci
 uint8_t displayBrightness = 180;        // Domyślna maksymalna janość wyswietlacza
-uint16_t displayAutoDimmerTime = 10;   // Czas po jakim nastąpi przyciemninie wyswietlacza, liczony w sekundach
+uint16_t displayAutoDimmerTime = 5;     // Czas po jakim nastąpi przyciemninie wyswietlacza, liczony w sekundach
 bool displayAutoDimmerOn = false;       // Automatyczne przyciemnianie wyswietlacza, domyślnie włączone
 bool displayDimmerActive = false;       // Aktywny tryb przyciemnienia
-uint16_t displayPowerSaveTime = 30;    // Czas po jakim zostanie wyłączony wyswietlacz OLED (tryb power save)
+uint16_t displayPowerSaveTime = 30;     // Czas po jakim zostanie wyłączony wyswietlacz OLED (tryb power save)
 uint16_t displayPowerSaveTimeCounter = 0;    // Timer trybu Power Save wyswietlacza OLED
 bool displayPowerSaveEnabled = false;   // Flaga okreslajaca czy tryb wyłączania wyswietlacza OLED jest właczony
-uint8_t displayMode = 0;               // Tryb wyswietlacza 0-displayRadio z przewijaniem "scroller" / 1-Zegar / 2- tryb 3 stałych linijek tekstu stacji
+uint8_t displayMode = 0;                // Tryb wyswietlacza 0-displayRadio z przewijaniem "scroller" / 1-Zegar / 2- tryb 3 stałych linijek tekstu stacji
 
 // ---- Equalzier ---- //
 int8_t toneLowValue = 0;               // Wartosc filtra dla tonow niskich
@@ -162,7 +165,7 @@ uint8_t rcInputDigit2 = 0xFF;      // Druga cyfra w przy wprowadzaniu numeru sta
 
 
 // ---- Zmienne konfiguracji ---- //
-uint16_t configArray[16] = { 0 };
+uint16_t configArray[18] = { 0 };
 uint8_t rcPage = 0;
 uint16_t configRemoteArray[30] = { 0 };   // Tablica przechowująca kody pilota podczas odczytu z pliku
 uint16_t configAdcArray[20] = { 0 };      // Tablica przechowująca wartosci ADC dla przyciskow klawiatury
@@ -178,7 +181,6 @@ bool flac = false;                // Flaga określająca, czy aktualny plik audi
 bool aac = false;                 // Flaga określająca, czy aktualny plik audio jest w formacie AAC
 bool vorbis = false;              // Flaga określająca, czy aktualny plik audio jest w formacie VORBIS
 bool opus = false;                // Flaga określająca, czy aktualny plik audio jest w formacie OPUS
-bool id3tag = false;              // Flaga określająca, czy plik audio posiada dane ID3
 bool timeDisplay = true;          // Flaga określająca kiedy pokazać czas na wyświetlaczu, domyślnie od razu po starcie
 bool listedStations = false;      // Flaga określająca czy na ekranie jest pokazana lista stacji do wyboru
 bool bankMenuEnable = false;      // Flaga określająca czy na ekranie jest wyświetlone menu wyboru banku
@@ -186,8 +188,7 @@ bool bitratePresent = false;      // Flaga określająca, czy na serial terminal
 bool bankNetworkUpdate = false;   // Flaga wyboru aktualizacji banku z sieci lub karty SPIFFS - True aktulizacja z NETu
 bool volumeMute = false;          // Flaga okreslająca stan funkcji wyciszczenia - Mute
 bool volumeSet = false;           // Flaga wejscia menu regulacji głosnosci na enkoderze 2
-bool vuMeterOn = true;            // Flaga właczajaca wskazniki VU
-bool vuMeterMode = false;         // tryb rysowania vuMeter
+
 bool action3Taken = false;        // Flaga Akcji 3 - załaczenia VU
 bool ActionNeedUpdateTime = false;// Zmiena okresaljaca dla displayRadio potrzebe odczytu aktulizacji czasu
 bool debugAudioBuffor = false;    // Wyswietlanie bufora Audio
@@ -220,7 +221,14 @@ uint8_t peakHoldTimeR = 0;                 // Licznik peakHold dla kanalu praweg
 const uint8_t peakHoldThreshold = 5;       // Liczba cykli zanim peak opadnie
 const uint8_t vuLy = 41;                   // Koordynata Y wskaznika VU L-lewego (wyzej)
 const uint8_t vuRy = 47;                   // Koordynata Y wskaznika VU R-prawego (nizej)
-
+bool vuPeakHoldOn = 1;                     // Flaga okreslajaca czy funkcja Peak & Hold na wskazniku VUmeter jest wlaczona
+bool vuMeterOn = true;                     // Flaga właczajaca wskazniki VU
+bool vuMeterMode = false;                  // tryb rysowania vuMeter
+uint8_t displayVuL = 0;                    // wartosc VU do wyswietlenia po procesie smooth
+uint8_t displayVuR = 0;                    // wartosc VU do wyswietlenia po procesie smooth
+uint8_t vuRiseSpeed = 24;                  // szybkość narastania VU
+uint8_t vuFallSpeed = 6;                   // szybkość opadania VU
+bool vuSmooth = 1;                         // Flaga zalaczenia funkcji smootht (domyslnie wlaczona=1)
 
 unsigned long scrollingStationStringTime;  // Czas do odswiezania scorllingu
 uint8_t scrollingRefresh = 50;              // Czas w ms przewijania tekstu funkcji Scroller
@@ -234,7 +242,7 @@ uint16_t offset;                           // Zminnna offsetu dla funkcji Scroll
 unsigned char * psramData;                 // zmienna do trzymania danych stacji w pamieci PSRAM
 
 unsigned long vuMeterMilisTimeUpdate;           // Zmienna przechowujaca czas dla funkci millis VU Meter refresh
-uint8_t vuMeterRefreshTime = 65;                // Czas w ms odswiezania VUmetera
+uint8_t vuMeterRefreshTime = 50;                // Czas w ms odswiezania VUmetera
 
 // ---- Serwer Web ---- //
 unsigned long currentTime = millis();
@@ -339,7 +347,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
 
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ESP32 Web Radio</title>
+    <title>Evo Web Radio</title>
     <style>
       html {font-family: Arial; display: inline-block; text-align: center;}
       h2 {font-size: 1.3rem;}
@@ -370,7 +378,7 @@ const char index_html[] PROGMEM = R"rawliteral(
   </head>
 
   <body>
-    <h2>ESP32 Web Radio</h2>
+    <h2>Evo Web Radio</h2>
   
     <div id="display" style="display: inline-block; padding: 5px; border: 2px solid #4CAF50; border-radius: 15px; background-color: #4a4a4a; font-size: 1.45rem; 
       color: #AAA; width: 345px; text-align: center; white-space: nowrap; box-shadow: 0 0 20px #4CAF50;" onClick="flashBackground(); displayMode()">
@@ -649,156 +657,168 @@ const char index_html[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 const char list_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML><html>
-<head>
-  <link rel='icon' href='/favicon.ico' type='image/x-icon'>
-  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
-  <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
+  <!DOCTYPE HTML><html>
+  <head>
+    <link rel='icon' href='/favicon.ico' type='image/x-icon'>
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
 
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ESP32 Web Radio</title>
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    h2 {font-size: 2.3rem;}
-    p {font-size: 1.1rem;}
-    table {border: 1px solid black; border-collapse: collapse; margin: 0px 0px;}
-    td, th {font-size: 0.8rem; border: 1px solid gray; border-collapse: collapse;}
-    td:hover {font-weight:bold;}
-    a {color: black; text-decoration: none;}
-    body {max-width: 1380px; margin:0px auto; padding-bottom: 25px;}
-    .columnlist { align: center; padding: 10px; display: flex; justify-content: center;}
-  </style>
-</head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Evo Web Radio</title>
+    <style>
+      html {font-family: Arial; display: inline-block; text-align: center;}
+      h2 {font-size: 1.3rem;}
+      p {font-size: 1.1rem;}
+      table {border: 1px solid black; border-collapse: collapse; margin: 0px 0px;}
+      td, th {font-size: 0.8rem; border: 1px solid gray; border-collapse: collapse;}
+      td:hover {font-weight:bold;}
+      a {color: black; text-decoration: none;}
+      body {max-width: 1380px; margin:0px auto; padding-bottom: 25px;}
+      .columnlist { align: center; padding: 10px; display: flex; justify-content: center;}
+    </style>
+  </head>
 )rawliteral";
 
 const char config_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-<head>
-  <link rel='icon' href='/favicon.ico' type='image/x-icon'>
-  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
-  <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
+  <!DOCTYPE HTML>
+  <html>
+  <head>
+    <link rel='icon' href='/favicon.ico' type='image/x-icon'>
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
 
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ESP32 Web Radio</title>
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    h1 {font-size: 2.3rem;}
-    table {border: 1px solid black; border-collapse: collapse; margin: 20px auto; width: 80%;}
-    th, td {font-size: 1rem; border: 1px solid gray; padding: 8px; text-align: left;}
-    td:hover {font-weight: bold;}
-    a {color: black; text-decoration: none;}
-    body {max-width: 1380px; margin:0 auto; padding-bottom: 25px;}
-    .tableSettings {border: 2px solid #4CAF50; border-collapse: collapse; margin: 10px auto; width: 60%;}
-  </style>
-  </head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Evo Web Radio</title>
+    <style>
+      html {font-family: Arial; display: inline-block; text-align: center;}
+      h1 {font-size: 2.3rem;}
+      h2 {font-size: 1.3rem;}
+      table {border: 1px solid black; border-collapse: collapse; margin: 20px auto; width: 80%;}
+      th, td {font-size: 1rem; border: 1px solid gray; padding: 8px; text-align: left;}
+      td:hover {font-weight: bold;}
+      a {color: black; text-decoration: none;}
+      body {max-width: 1380px; margin:0 auto; padding-bottom: 25px;}
+      .tableSettings {border: 2px solid #4CAF50; border-collapse: collapse; margin: 10px auto; width: 60%;}
+    </style>
+    </head>
 
-<body>
-<h2>ESP32 Radio - Settings</h2>
-<form action="/configupdate" method="POST">
-<table class="tableSettings">
-<tr><th>Setting</th><th>Value</th></tr>
-<tr><td>Normal Display Brightness (0-255)</td><td><input type="number" name="displayBrightness" min="1" max="255" value="%D1"></td></tr>
-<tr><td>Dimmed Display Brightness (0-255)</td><td><input type="number" name="dimmerDisplayBrightness" min="1" max="255" value="%D2"></td></tr>
-<tr><td>Auto Dimmer Delay Time (1-255 sec.)</td><td><input type="number" name="displayAutoDimmerTime" min="1" max="255" value="%D3"></td></tr>
-<tr><td>Auto Dimmer</td><td><select name="displayAutoDimmerOn"><option value="1"%S1>On</option><option value="0"%S2>Off</option></select></td></tr>
-<tr><td>Time Voice Info Every Hour</td><td><select name="timeVoiceInfoEveryHour"><option value="1"%S3>On</option><option value="0"%S4>Off</option></select></td></tr>
-<tr><td>VU Meter Mode (0-1),    0-dashed lines, 1-continuous lines</td><td><input type="number" name="vuMeterMode" min="0" max="1" value="%D4"></td></tr>
-<tr><td>Encoder Function Order (0-1),   0-Volume, click for station list, 1-Station list, click for Volume</td><td><input type="number" name="encoderFunctionOrder" min="0" max="1" value="%D5"></td></tr>
-<tr><td>Display Mode (0-2),   0-Radio scroller, 1-Clock, 2-Three lines without scroll</td><td><input type="number" name="displayMode" min="0" max="2" value="%D6"></td></tr>
+  <body>
+  <h2>Evo Web Radio - Settings</h2>
+  <form action="/configupdate" method="POST">
+  <table class="tableSettings">
+  <tr><th>Setting</th><th>Value</th></tr>
+  <tr><td>Normal Display Brightness (0-255), default:180</td><td><input type="number" name="displayBrightness" min="1" max="255" value="%D1"></td></tr>
+  <tr><td>Dimmed Display Brightness (0-255), default:20</td><td><input type="number" name="dimmerDisplayBrightness" min="1" max="255" value="%D2"></td></tr>
+  <tr><td>Auto Dimmer Delay Time (1-255 sec.), default:5</td><td><input type="number" name="displayAutoDimmerTime" min="1" max="255" value="%D3"></td></tr>
+  <tr><td>Auto Dimmer, default:On</td><td><select name="displayAutoDimmerOn"><option value="1"%S1>On</option><option value="0"%S2>Off</option></select></td></tr>
+  <tr><td>Time Voice Info Every Hour, default:On</td><td><select name="timeVoiceInfoEveryHour"><option value="1"%S3>On</option><option value="0"%S4>Off</option></select></td></tr>
+  <tr><td>VU Meter Mode (0-1),    0-dashed lines, 1-continuous lines</td><td><input type="number" name="vuMeterMode" min="0" max="1" value="%D4"></td></tr>
+  <tr><td>Encoder Function Order (0-1),   0-Volume, click for station list, 1-Station list, click for Volume</td><td><input type="number" name="encoderFunctionOrder" min="0" max="1" value="%D5"></td></tr>
+  <tr><td>Display Mode (0-2),   0-Radio scroller, 1-Clock, 2-Three lines without scroll</td><td><input type="number" name="displayMode" min="0" max="2" value="%D6"></td></tr>
 
-<tr><td>VU Meter Visible (Mode 0 only)</td><td><select name="vuMeterOn"><option value="1"%S5>On</option><option value="0"%S6>Off</option></select></td></tr>
+  
 
-<!-- <tr><td>VU Meter Refresh Time (20-100ms)</td><td><input type="number" name="vuMeterRefreshTime" min="15" max="100" value="%D7"></td></tr> -->
+  <!-- <tr><td>VU Meter Refresh Time (20-100ms)</td><td><input type="number" name="vuMeterRefreshTime" min="15" max="100" value="%D7"></td></tr> -->
 
-<tr><td>Radio Scroller & VU Meter Refresh Time (15-100ms)</td><td><input type="number" name="scrollingRefresh" min="15" max="100" value="%D8"></td></tr>
-<tr><td>ADC Keyboard Enabled</td><td><select name="adcKeyboardEnabled"><option value="1"%S7>On</option><option value="0"%S8>Off</option></select></td></tr>
+  <tr><td>Radio Scroller & VU Meter Refresh Time (15-100ms), default:50</td><td><input type="number" name="scrollingRefresh" min="15" max="100" value="%D8"></td></tr>
+  <tr><td>ADC Keyboard Enabled, default:Off</td><td><select name="adcKeyboardEnabled"><option value="1"%S7>On</option><option value="0"%S8>Off</option></select></td></tr>
 
-<tr><td>OLED Power Save Mode</td><td><select name="displayPowerSaveEnabled"><option value="1"%S9>On</option><option value="0"%S10>Off</option></select></td></tr>
-<tr><td>OLED Power Save Time (1-600sek.)</td><td><input type="number" name="displayPowerSaveTime" min="1" max="600" value="%D9"></td></tr>
-<tr><td>Max Volume Extended range -> 1-21 [Off], 1-42 [On]</td><td><select name="maxVolumeExt"><option value="1"%11>On</option><option value="0"%S12>Off</option></select></td></tr>
-</table>
-<input type="submit" value="Update">
-</form>
-<p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>
-</body>
-</html>
+  <tr><td>OLED Power Save Mode, default:Off</td><td><select name="displayPowerSaveEnabled"><option value="1"%S9>On</option><option value="0"%S10>Off</option></select></td></tr>
+  <tr><td>OLED Power Save Time (1-600sek.), default:20</td><td><input type="number" name="displayPowerSaveTime" min="1" max="600" value="%D9"></td></tr>
+  <tr><td>Volume Steps 1-21 [Off], 1-42  [On], default:Off</td><td><select name="maxVolumeExt"><option value="1"%S11>On</option><option value="0"%S12>Off</option></select></td></tr>
+  <tr><td>Station Name Read From Stream [On-From Stream, Off-From Bank] EXPERIMENTAL</td><td><select name="stationNameFromStream"><option value="1"%S17>On</option><option value="0"%S18>Off</option></select></td></tr>
+  <tr><th><b>VU Meter Settings</b></th></tr>
+  <tr><td>VU Meter Visible (Mode 0 only), default:On</td><td><select name="vuMeterOn"><option value="1"%S5>On</option><option value="0"%S6>Off</option></select></td></tr>
+  <tr><td>VU Meter Peak & Hold Function, default:On </td><td><select name="vuPeakHoldOn"><option value="1"%13>On</option><option value="0"%S14>Off</option></select></td></tr>
+  <tr><td>VU Meter Smooth Function, default:On </td><td><select name="vuSmooth"><option value="1"%S15>On</option><option value="0"%S16>Off</option></select></td></tr>
+
+  <tr><td>VU Meter Smooth Rise Speed [1 low - 32 High], default:24</td><td><input type="number" name="vuRiseSpeed" min="1" max="32" value="%D10"></td></tr>
+  <tr><td>VU Meter Smooth Fall Speed [1 low - 32 High], default:6</td><td><input type="number" name="vuFallSpeed" min="1" max="32" value="%D11"></td></tr>
+  
+
+  </table>
+  <input type="submit" value="Update">
+  </form>
+  <p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>
+  </body>
+  </html>
 )rawliteral";
 
 const char adc_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE HTML>
-<html>
-<head>
-  <link rel='icon' href='/favicon.ico' type='image/x-icon'>
-  <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
-  <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
-  <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
+  <!DOCTYPE HTML>
+  <html>
+  <head>
+    <link rel='icon' href='/favicon.ico' type='image/x-icon'>
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icon.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
 
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ESP32 Web Radio</title>
-  <style>
-    html {font-family: Arial; display: inline-block; text-align: center;}
-    h1 {font-size: 2.3rem;}
-    table {border: 1px solid black; border-collapse: collapse; margin: 10px auto; width: 40%;}
-    th, td {font-size: 1rem; border: 1px solid gray; padding: 8px; text-align: left;}
-    td:hover {font-weight: bold;}
-    a {color: black; text-decoration: none;}
-    body {max-width: 1380px; margin:0 auto; padding-bottom: 15px;}
-    .tableSettings {border: 2px solid #4CAF50; border-collapse: collapse; margin: 10px auto; width: 40%;}
-  </style>
-  </head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Evo Web Radio</title>
+    <style>
+      html {font-family: Arial; display: inline-block; text-align: center;}
+      h1 {font-size: 2.3rem;}
+      h2 {font-size: 1.3rem;}
+      table {border: 1px solid black; border-collapse: collapse; margin: 10px auto; width: 40%;}
+      th, td {font-size: 1rem; border: 1px solid gray; padding: 8px; text-align: left;}
+      td:hover {font-weight: bold;}
+      a {color: black; text-decoration: none;}
+      body {max-width: 1380px; margin:0 auto; padding-bottom: 15px;}
+      .tableSettings {border: 2px solid #4CAF50; border-collapse: collapse; margin: 10px auto; width: 40%;}
+    </style>
+    </head>
 
-<body>
-<h2>ESP32 Radio - ADC Settings</h2>
-<form action="/configadc" method="POST">
-<table class="tableSettings">
-<tr><th>Button</th><th>Value</th></tr>
-<tr><td>keyboardButtonThreshold_0</td><td><input type="number" name="keyboardButtonThreshold_0" min="0" max="4095" value="%D0"></td></tr>
-<tr><td>keyboardButtonThreshold_1</td><td><input type="number" name="keyboardButtonThreshold_1" min="0" max="4095" value="%D1"></td></tr>
-<tr><td>keyboardButtonThreshold_2</td><td><input type="number" name="keyboardButtonThreshold_2" min="0" max="4095" value="%D2"></td></tr>
-<tr><td>keyboardButtonThreshold_3</td><td><input type="number" name="keyboardButtonThreshold_3" min="0" max="4095" value="%D3"></td></tr>
-<tr><td>keyboardButtonThreshold_4</td><td><input type="number" name="keyboardButtonThreshold_4" min="0" max="4095" value="%D4"></td></tr>
-<tr><td>keyboardButtonThreshold_5</td><td><input type="number" name="keyboardButtonThreshold_5" min="0" max="4095" value="%D5"></td></tr>
-<tr><td>keyboardButtonThreshold_6</td><td><input type="number" name="keyboardButtonThreshold_6" min="0" max="4095" value="%D6"></td></tr>
-<tr><td>keyboardButtonThreshold_7</td><td><input type="number" name="keyboardButtonThreshold_7" min="0" max="4095" value="%D7"></td></tr>
-<tr><td>keyboardButtonThreshold_8</td><td><input type="number" name="keyboardButtonThreshold_8" min="0" max="4095" value="%D8"></td></tr>
-<tr><td>keyboardButtonThreshold_9</td><td><input type="number" name="keyboardButtonThreshold_9" min="0" max="4095" value="%D9"></td></tr>
-<tr><td>keyboardButtonThreshold_Shift - Ok/Enter</td><td><input type="number" name="keyboardButtonThreshold_Shift" min="0" max="4095" value="%D10"></td></tr>
-<tr><td>keyboardButtonThreshold_Memory - Bank Menu</td><td><input type="number" name="keyboardButtonThreshold_Memory" min="0" max="4095" value="%D11"></td></tr>
-<tr><td>keyboardButtonThreshold_Band -  Back</td><td><input type="number" name="keyboardButtonThreshold_Band" min="0" max="4095" value="%D12"></td></tr>
-<tr><td>keyboardButtonThreshold_Auto -  Display Mode</td><td><input type="number" name="keyboardButtonThreshold_Auto" min="0" max="4095" value="%D13"></td></tr>
-<tr><td>keyboardButtonThreshold_Scan - Dimmer/Network Bank Update</td><td><input type="number" name="keyboardButtonThreshold_Scan" min="0" max="4095" value="%D14"></td></tr>
-<tr><td>keyboardButtonThreshold_Mute - Mute</td><td><input type="number" name="keyboardButtonThreshold_Mute" min="0" max="4095" value="%D15"></td></tr>
-<tr><td>keyboardButtonThresholdTolerance</td><td><input type="number" name="keyboardButtonThresholdTolerance" min="0" max="50" value="%D16"></td></tr>
-<tr><td>keyboardButtonNeutral</td><td><input type="number" name="keyboardButtonNeutral" min="0" max="4095" value="%D17"></td></tr>
-<tr><td>keyboardSampleDelay (30-300ms)</td><td><input type="number" name="keyboardSampleDelay" min="30" max="300" value="%D18"></td></tr>
-</table>
-<input type="submit" value="ADC Thresholds Update">
-</form>
-<br>
-<button onclick="toggleAdcDebug()">ADC Debug ON/OFF</button>
-<script>
-function toggleAdcDebug() {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", "/toggleAdcDebug", true);
-    xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-    xhr.onload = function() {
-        if (xhr.status === 200) {
-            alert("ADC Debug is now " + (xhr.responseText === "1" ? "ON" : "OFF"));
-        } else {
-            alert("Error: " + xhr.statusText);
-        }
-    };
-    xhr.send(); // Wysyłanie pustego zapytania POST
-}
-</script>
+  <body>
+  <h2>Evo Web Radio - ADC Settings</h2>
+  <form action="/configadc" method="POST">
+  <table class="tableSettings">
+  <tr><th>Button</th><th>Value</th></tr>
+  <tr><td>keyboardButtonThreshold_0</td><td><input type="number" name="keyboardButtonThreshold_0" min="0" max="4095" value="%D0"></td></tr>
+  <tr><td>keyboardButtonThreshold_1</td><td><input type="number" name="keyboardButtonThreshold_1" min="0" max="4095" value="%D1"></td></tr>
+  <tr><td>keyboardButtonThreshold_2</td><td><input type="number" name="keyboardButtonThreshold_2" min="0" max="4095" value="%D2"></td></tr>
+  <tr><td>keyboardButtonThreshold_3</td><td><input type="number" name="keyboardButtonThreshold_3" min="0" max="4095" value="%D3"></td></tr>
+  <tr><td>keyboardButtonThreshold_4</td><td><input type="number" name="keyboardButtonThreshold_4" min="0" max="4095" value="%D4"></td></tr>
+  <tr><td>keyboardButtonThreshold_5</td><td><input type="number" name="keyboardButtonThreshold_5" min="0" max="4095" value="%D5"></td></tr>
+  <tr><td>keyboardButtonThreshold_6</td><td><input type="number" name="keyboardButtonThreshold_6" min="0" max="4095" value="%D6"></td></tr>
+  <tr><td>keyboardButtonThreshold_7</td><td><input type="number" name="keyboardButtonThreshold_7" min="0" max="4095" value="%D7"></td></tr>
+  <tr><td>keyboardButtonThreshold_8</td><td><input type="number" name="keyboardButtonThreshold_8" min="0" max="4095" value="%D8"></td></tr>
+  <tr><td>keyboardButtonThreshold_9</td><td><input type="number" name="keyboardButtonThreshold_9" min="0" max="4095" value="%D9"></td></tr>
+  <tr><td>keyboardButtonThreshold_Shift - Ok/Enter</td><td><input type="number" name="keyboardButtonThreshold_Shift" min="0" max="4095" value="%D10"></td></tr>
+  <tr><td>keyboardButtonThreshold_Memory - Bank Menu</td><td><input type="number" name="keyboardButtonThreshold_Memory" min="0" max="4095" value="%D11"></td></tr>
+  <tr><td>keyboardButtonThreshold_Band -  Back</td><td><input type="number" name="keyboardButtonThreshold_Band" min="0" max="4095" value="%D12"></td></tr>
+  <tr><td>keyboardButtonThreshold_Auto -  Display Mode</td><td><input type="number" name="keyboardButtonThreshold_Auto" min="0" max="4095" value="%D13"></td></tr>
+  <tr><td>keyboardButtonThreshold_Scan - Dimmer/Network Bank Update</td><td><input type="number" name="keyboardButtonThreshold_Scan" min="0" max="4095" value="%D14"></td></tr>
+  <tr><td>keyboardButtonThreshold_Mute - Mute</td><td><input type="number" name="keyboardButtonThreshold_Mute" min="0" max="4095" value="%D15"></td></tr>
+  <tr><td>keyboardButtonThresholdTolerance</td><td><input type="number" name="keyboardButtonThresholdTolerance" min="0" max="50" value="%D16"></td></tr>
+  <tr><td>keyboardButtonNeutral</td><td><input type="number" name="keyboardButtonNeutral" min="0" max="4095" value="%D17"></td></tr>
+  <tr><td>keyboardSampleDelay (30-300ms)</td><td><input type="number" name="keyboardSampleDelay" min="30" max="300" value="%D18"></td></tr>
+  </table>
+  <input type="submit" value="ADC Thresholds Update">
+  </form>
+  <br>
+  <button onclick="toggleAdcDebug()">ADC Debug ON/OFF</button>
+  <script>
+  function toggleAdcDebug() {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/toggleAdcDebug", true);
+      xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+      xhr.onload = function() {
+          if (xhr.status === 200) {
+              alert("ADC Debug is now " + (xhr.responseText === "1" ? "ON" : "OFF"));
+          } else {
+              alert("Error: " + xhr.statusText);
+          }
+      };
+      xhr.send(); // Wysyłanie pustego zapytania POST
+  }
+  </script>
 
 
-<p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>
-</body>
-</html>
+  <p style='font-size: 0.8rem;'><a href='/menu'>Go Back</a></p>
+  </body>
+  </html>
 )rawliteral";
 
 const char menu_html[] PROGMEM = R"rawliteral(
@@ -810,7 +830,7 @@ const char menu_html[] PROGMEM = R"rawliteral(
   <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
 
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ESP32 Web Radio</title>
+  <title>Evo Web Radio</title>
   <style>
     html {font-family: Arial; display: inline-block; text-align: center;}
     h2 {font-size: 1.3rem;}
@@ -824,14 +844,14 @@ const char menu_html[] PROGMEM = R"rawliteral(
   </style>
   </head>
   <body>
-  <h2>ESP32 Web Radio - Menu</h2>
+  <h2>Evo Web Radio - Menu</h2>
   <!-- <br><button class="button" onclick="location.href='/fwupdate'">OTA Update (Old)</button><br> -->
   <br><button class="button" onclick="location.href='/info'">Info</button><br>
   <br><button class="button" onclick="location.href='/ota'">OTA Update</button><br>
   <br><button class="button" onclick="location.href='/adc'">ADC Keyboard Settings</button><br>
   <br><button class="button" onclick="location.href='/list'">SPIFFS Explorer</button><br>
   <br><button class="button" onclick="location.href='/editor'">Memory Bank Editor</button><br>
-  <br><button class="button" onclick="location.href='/config'">Configuration</button><br>
+  <br><button class="button" onclick="location.href='/config'">Settings</button><br>
   <br><p style='font-size: 0.8rem;'><a href="#" onclick="window.location.replace('/')">Go Back</a></p>
   </body></html>
 
@@ -847,10 +867,10 @@ const char info_html[] PROGMEM = R"rawliteral(
     <link rel="icon" type="image/png" sizes="192x192" href="/icon.png">
 
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ESP32 Web Radio</title>
+    <title>Evo Web Radio</title>
     <style>
       html {font-family: Arial; display: inline-block; text-align: center;}
-      h2 {font-size: 1.7rem;}
+      h2 {font-size: 1.3rem;}
       table {border: 1px solid black; border-collapse: collapse; margin: 10px auto; width: 40%;}
       th, td {font-size: 1rem; border: 1px solid gray; padding: 8px; text-align: left;}
       td:hover {font-weight: bold;}
@@ -866,7 +886,7 @@ const char info_html[] PROGMEM = R"rawliteral(
     </head>
 
   <body>
-  <h2>ESP32 Radio - Info</h2>
+  <h2>Evo Web Radio - Info</h2>
   <form action="/configadc" method="POST">
   <table class="tableSettings">
 
@@ -1121,7 +1141,7 @@ const int LEAD_HIGH = 9050;         // 9 ms sygnał wysoki (początkowy)
 const int LEAD_LOW = 4500;          // 4,5 ms sygnał niski (początkowy)
 const int TOLERANCE = 150;          // Tolerancja (w mikrosekundach)
 const int HIGH_THRESHOLD = 1650;    // Sygnał "1"
-const int LOW_THRESHOLD = 530;      // Sygnał "0"
+const int LOW_THRESHOLD = 520;      // Sygnał "0"
 
 bool data_start_detected = false;  // Flaga dla sygnału wstępnego
 bool rcInputDigitsMenuEnable = false;
@@ -1808,7 +1828,7 @@ void stationStringFormatting() // Funkcja aktualizujaca dla scorllera stationStr
     stationStringScrollWidth = stationStringScroll.length() * 6;
     Serial.print("### Station String Scroll Width (lenght * 6) [px]:"); Serial.println(stationStringScrollWidth);
 	  
-    Serial.print("debug -> Display0 (VU) stationStringScroll: ");
+    Serial.print("debug -> Display0 (VUmeter mode) stationStringScroll: ");
     Serial.println(stationStringScroll);
 
 
@@ -1887,6 +1907,9 @@ void displayRadio()
   if (displayMode == 0)
   {
     u8g2.clearBuffer();
+    //u8g2.setFont(u8g2_font_fub14_tf);
+    //u8g2.setFont(u8g2_font_luRS14_tf);
+    //u8g2.setFont(u8g2_font_helvB14_tr);
     u8g2.setFont(u8g2_font_10x20_tf);
     u8g2.drawStr(24, 16, stationName.substring(0, stationNameLenghtCut - 1).c_str());
     u8g2.drawRBox(1, 1, 21, 16, 4);  // Rbox pod numerem stacji
@@ -1897,9 +1920,11 @@ void displayRadio()
     snprintf(BankStr, sizeof(BankStr), "Bank%02d", bank_nr); // Formatujemy numer banku do postacji 00
 
     // Wyswietlamy numer Banku w dolnej linijce
-    u8g2.drawBox(154, 54, 1, 12);  // dorysowujemy 1px pasek przed napisem "Bank" dla symetrii
+    //u8g2.drawBox(154, 54, 1, 12);  // dorysowujemy 1px pasek przed napisem "Bank" dla symetrii
+    u8g2.drawBox(161, 54, 1, 12);  // dorysowujemy 1px pasek przed napisem "Bank" dla symetrii
     u8g2.setDrawColor(0);
-    u8g2.setCursor(155, 63);  // Pozycja napisu Bank0x na dole ekranu
+    //u8g2.setCursor(155, 63);  // Pozycja napisu Bank0x na dole ekranu
+    u8g2.setCursor(162, 63);  // Pozycja napisu Bank0x na dole ekranu
     u8g2.print(BankStr);
 
 
@@ -1949,9 +1974,11 @@ void displayRadio()
     snprintf(BankStr, sizeof(BankStr), "Bank%02d", bank_nr); // Formatujemy numer banku do postacji 00
 
     // Wyswietlamy numer Banku w dolnej linijce
-    u8g2.drawBox(154, 54, 1, 12);  // dorysowujemy 1px pasek przed napisem "Bank" dla symetrii
+    //u8g2.drawBox(154, 54, 1, 12);  // dorysowujemy 1px pasek przed napisem "Bank" dla symetrii
+    u8g2.drawBox(161, 54, 1, 12);  // dorysowujemy 1px pasek przed napisem "Bank" dla symetrii
     u8g2.setDrawColor(0);
-    u8g2.setCursor(155, 63);  // Pozycja napisu Bank0x na dole ekranu
+    //u8g2.setCursor(155, 63);  // Pozycja napisu Bank0x na dole ekranu
+    u8g2.setCursor(162, 63);  // Pozycja napisu Bank0x na dole ekranu
     u8g2.print(BankStr);
 
 
@@ -1975,6 +2002,49 @@ void displayRadio()
     String displayString = String(SampleRate) + "." + String(SampleRateRest) + "kHz " + bitsPerSampleString + "bit " + bitrateString + "kbps";
     u8g2.setFont(spleen6x12PL);
     u8g2.drawStr(0, 63, displayString.c_str());  
+  }
+  else if (displayMode == 3) // Tryb wświetlania mode 3 - linijka statusu (stacja, bank godzina) na gorze i na dole (format stream, wifi zasieg)
+  {
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_fub14_tf);
+    u8g2.drawStr(24, 16, stationName.substring(0, stationNameLenghtCut - 1).c_str());
+    u8g2.drawRBox(1, 1, 21, 16, 4);  // Rbox pod numerem stacji
+    
+    // Funkcja wyswietlania numeru Banku na dole ekranu
+    u8g2.setFont(spleen6x12PL);
+    char BankStr[8];  
+    snprintf(BankStr, sizeof(BankStr), "Bank%02d", bank_nr); // Formatujemy numer banku do postacji 00
+
+    // Wyswietlamy numer Banku w dolnej linijce
+    u8g2.drawBox(154, 54, 1, 12);  // dorysowujemy 1px pasek przed napisem "Bank" dla symetrii
+    u8g2.setDrawColor(0);
+    u8g2.setCursor(155, 63);  // Pozycja napisu Bank0x na dole ekranu
+    u8g2.print(BankStr);
+
+
+    u8g2.setDrawColor(0);
+    u8g2.setFont(u8g2_font_spleen8x16_mr);
+    char StationNrStr[3];
+    snprintf(StationNrStr, sizeof(StationNrStr), "%02d", station_nr);  //Formatowanie informacji o stacji i banku do postaci 00
+    u8g2.setCursor(4, 14);                                            // Pozycja numeru stacji na gorze po lewej ekranu
+    u8g2.print(StationNrStr);
+    u8g2.setDrawColor(1);
+    
+    u8g2.setFont(spleen6x12PL);
+        
+    stationStringFormatting(); //Formatujemy stationString wyswietlany przez funkcję Scrollera
+
+    u8g2.drawLine(0, 52, 255, 52);
+    
+    // Przeliczamy Hz na kHz
+    int SampleRate = sampleRateString.toInt();
+    int SampleRateRest = SampleRate % 1000;
+    SampleRateRest = SampleRateRest / 100;
+    SampleRate = SampleRate / 1000;
+    
+    String displayString = String(SampleRate) + "." + String(SampleRateRest) + "kHz " + bitsPerSampleString + "bit " + bitrateString + "kbps";
+    u8g2.setFont(u8g2_font_04b_03_tr);
+    u8g2.drawStr(0, 63, displayString.c_str());
   }
 }
 
@@ -2070,6 +2140,8 @@ void audio_showstation(const char *info) {
   Serial.println(info);
   stationNameStream = info;
   stationNameStreamWeb = info;
+  if ((bank_nr == 0) || (stationNameFromStream)) stationName = String(info); // Jesli gramy z ze strony WEB URL lub flaga stationNameFromStream=1 to odczytujemy nazwe stacji ze streamu nie z pliku banku
+  
   audioInfoRefresh = true;
   wsAudioRefresh = true;
 }
@@ -2375,7 +2447,7 @@ void saveVolumeOnSPIFFS()
   if (noSPIFFScard == true) {EEPROM.write(2,volumeValue); EEPROM.commit(); Serial.println("Zapis volume do EEPROM");}
 }
 
-void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print)
+void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print, bool mode)
 {
   // Wartosci na podstawie ->  https://www.intuitibits.com/2016/03/23/dbm-to-percent-conversion/
   int signal_dBM[] = { -100, -99, -98, -97, -96, -95, -94, -93, -92, -91, -90, -89, -88, -87, -86, -85, -84, -83, -82, -81, -80, -79, -78, -77, -76, -75, -74, -73, -72, -71, -70, -69, -68, -67, -66, -65, -64, -63, -62, -61, -60, -59, -58, -57, -56, -55, -54, -53, -52, -51, -50, -49, -48, -47, -46, -45, -44, -43, -42, -41, -40, -39, -38, -37, -36, -35, -34, -33, -32, -31, -30, -29, -28, -27, -26, -25, -24, -23, -22, -21, -20, -19, -18, -17, -16, -15, -14, -13, -12, -11, -10, -9, -8, -7, -6, -5, -4, -3, -2, -1};
@@ -2400,7 +2472,7 @@ void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print)
   u8g2.drawBox(xpwr + 8, ypwr - 1, 1, 1);
   u8g2.drawBox(xpwr + 10, ypwr - 1, 1, 1);
 
- if (WiFi.status() == WL_CONNECTED)
+ if ((WiFi.status() == WL_CONNECTED) && (mode == 0))
  {
       // Rysujemy kreseczki
     if (signalpwr > -88) { signalLevel = 1; u8g2.drawBox(xpwr, ypwr - 2, 1, 1); }     // 0-14
@@ -2411,6 +2483,18 @@ void drawSignalPower(uint8_t xpwr, uint8_t ypwr, bool print)
     if (signalpwr > -50) { signalLevel = 6; u8g2.drawBox(xpwr + 10, ypwr - 8, 1, 7);} // > 84
   }
 
+  if ((WiFi.status() == WL_CONNECTED) && (mode == 1))
+  {
+      // Rysujemy kreseczki
+    if (signalpwr > -88) { signalLevel = 1; u8g2.drawBox(xpwr, ypwr - 2, 1, 1); }     // 0-14
+    if (signalpwr > -81) { signalLevel = 2; u8g2.drawBox(xpwr + 2, ypwr - 3, 1, 2); } // > 28
+    if (signalpwr > -74) { signalLevel = 3; u8g2.drawBox(xpwr + 4, ypwr - 4, 1, 3); } // > 42
+    if (signalpwr > -66) { signalLevel = 4; u8g2.drawBox(xpwr + 6, ypwr - 5, 1, 4); } // > 56
+    if (signalpwr > -57) { signalLevel = 5; u8g2.drawBox(xpwr + 8, ypwr - 6, 1, 5); } // > 70
+    if (signalpwr > -50) { signalLevel = 6; u8g2.drawBox(xpwr + 10, ypwr - 7, 1, 6);} // > 84
+  }
+
+  
   if (print == true) // Jesli flaga print =1 to wypisujemy na serialu sile sygnału w % i w skali 1-6
   {
     for (int j = 0; j < 100; j++) 
@@ -2788,10 +2872,15 @@ void displayStations()
   listedStations = true;
   u8g2.clearBuffer();  // Wyczyść bufor przed rysowaniem, aby przygotować ekran do nowej zawartości
   u8g2.setFont(spleen6x12PL);
-  u8g2.setCursor(60, 10);                                          // Ustaw pozycję kursora (x=60, y=10) dla nagłówka
-  u8g2.print("RADIO STATIONS:   ");                                // Wyświetl nagłówek "Radio Stations:"
+  u8g2.setCursor(20, 10);                                          // Ustaw pozycję kursora (x=60, y=10) dla nagłówka
+  u8g2.print("BANK: " + String(bank_nr));                                          // Wyświetl nagłówek "BANK:"
+  u8g2.setCursor(68, 10);                                          // Ustaw pozycję kursora (x=60, y=10) dla nagłówka
+  u8g2.print(" - RADIO STATIONS: ");                                // Wyświetl nagłówek "Radio Stations:"
   u8g2.print(String(station_nr) + " / " + String(stationsCount));  // Dodaj numer aktualnej stacji i licznik wszystkich stacji
+  u8g2.drawLine(0,11,256,11);
+  // "BANK: 16 - RADIO STATIONS: 99 / 99
 
+  
   int displayRow = 1;  // Zmienna dla numeru wiersza, zaczynając od drugiego (pierwszy to nagłówek)
   
   //erial.print("FirstVisibleLine:");
@@ -2816,13 +2905,15 @@ void displayStations()
     if (i == currentSelection) 
     {
       u8g2.setDrawColor(1);                           // Ustaw biały kolor rysowania
-      u8g2.drawBox(0, displayRow * 13 - 2, 256, 13);  // Narysuj prostokąt jako tło dla zaznaczonej stacji (x=0, szerokość 256, wysokość 10)
+      //u8g2.drawBox(0, displayRow * 13 - 2, 256, 13);  // Narysuj prostokąt jako tło dla zaznaczonej stacji (x=0, szerokość 256, wysokość 10)
+      u8g2.drawBox(0, displayRow * 13, 256, 13);  // Narysuj prostokąt jako tło dla zaznaczonej stacji (x=0, szerokość 256, wysokość 10)
       u8g2.setDrawColor(0);                           // Zmień kolor rysowania na czarny dla tekstu zaznaczonej stacji
     } else {
       u8g2.setDrawColor(1);  // Dla niezaznaczonych stacji ustaw zwykły biały kolor tekstu
     }
     // Wyświetl nazwę stacji, ustawiając kursor na odpowiedniej pozycji
-    u8g2.drawStr(0, displayRow * 13 + 8, String(station).c_str());
+    //u8g2.drawStr(0, displayRow * 13 + 8, String(station).c_str());
+    u8g2.drawStr(0, displayRow * 13 + 10, String(station).c_str());
     //u8g2.print(station);  // Wyświetl nazwę stacji
 
     // Przejdź do następnej linii (następny wiersz na ekranie)
@@ -2853,27 +2944,37 @@ void updateTimer()
 
   if (timeDisplay == true) 
   {
-    if ((audio.isRunning() == true) && (displayMode == 0) || (displayMode == 2)) {
+    if ((audio.isRunning() == true) && (displayMode == 0) || (displayMode == 2)) 
+    {
       if (mp3 == true) {
-        u8g2.drawStr(133, 63, "MP3");
+        u8g2.drawStr(135, 63, "MP3");
         //Serial.println("Gram MP3");
       }
       if (flac == true) {
-        u8g2.drawStr(133, 63, "FLC");
+        u8g2.drawStr(135, 63, "FLAC");
         //Serial.println("Gram FLAC");
       }
       if (aac == true) {
-        u8g2.drawStr(133, 63, "AAC");
+        u8g2.drawStr(135, 63, "AAC");
         //Serial.println("Gram AAC");
       }
       if (vorbis == true) {
-        u8g2.drawStr(133, 63, "VRB");
+        u8g2.drawStr(135, 63, "VRB");
         //Serial.println("Gram VORBIS");
       }
       if (opus == true) {
-        u8g2.drawStr(129, 63, "OPUS");
+        u8g2.drawStr(135, 63, "OPUS");
         //Serial.println("Gram OPUS");
       }
+    }
+    else if ((audio.isRunning() == true) && (displayMode == 3)) 
+    {
+      u8g2.setFont(u8g2_font_04b_03_tr);
+      if (mp3 == true)  {u8g2.drawStr(113, 63, "MP3");}
+      if (flac == true) {u8g2.drawStr(113, 63, "FLAC");}
+      if (aac == true)  {u8g2.drawStr(113, 63, "AAC");}
+      if (vorbis == true) {u8g2.drawStr(113, 63, "VRB");}
+      if (opus == true) {u8g2.drawStr(113, 63, "OPUS");}
     }
 
     if ((timeDisplay == true) && (audio.isRunning() == true))
@@ -2889,6 +2990,8 @@ void updateTimer()
         return;  // Zakończ funkcję, gdy nie udało się uzyskać czasu
       }
 
+      bool showDots = (timeinfo.tm_sec % 2 == 0); // Parzysta sekunda = pokazuj dwukropek
+
       // Konwertuj godzinę, minutę i sekundę na stringi w formacie "HH:MM:SS"
       char timeString[9];  // Bufor przechowujący czas w formie tekstowej
       //snprintf(timeString, sizeof(timeString), "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
@@ -2897,15 +3000,20 @@ void updateTimer()
 
       if ((displayMode == 0) || (displayMode == 2))
       { 
-        snprintf(timeString, sizeof(timeString), "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        //snprintf(timeString, sizeof(timeString), "%2d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        if (showDots) snprintf(timeString, sizeof(timeString), "%2d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+        else snprintf(timeString, sizeof(timeString), "%2d %02d", timeinfo.tm_hour, timeinfo.tm_min);
         u8g2.setFont(spleen6x12PL);
-        u8g2.drawStr(208, 63, timeString);
+        //u8g2.drawStr(208, 63, timeString);
+        u8g2.drawStr(226, 63, timeString);
       }
       else if (displayMode == 1)
       {
         int xtime = 0;
         u8g2.setFont(u8g2_font_7Segments_26x42_mn);
-        snprintf(timeString, sizeof(timeString), "%2d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+        if (showDots) snprintf(timeString, sizeof(timeString), "%2d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+        else snprintf(timeString, sizeof(timeString), "%2d %02d", timeinfo.tm_hour, timeinfo.tm_min);
+
         u8g2.drawStr(xtime+7, 45, timeString);
         
         
@@ -2952,9 +3060,15 @@ void updateTimer()
         snprintf(timeString, sizeof(timeString), ":%02d", timeinfo.tm_sec);
         u8g2.drawStr(xtime+163, 45, timeString);
       }
+      else if (displayMode == 3)
+      { 
+        if (showDots) snprintf(timeString, sizeof(timeString), "%2d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+        else snprintf(timeString, sizeof(timeString), "%2d %02d", timeinfo.tm_hour, timeinfo.tm_min);
+        u8g2.setFont(spleen6x12PL);
+        u8g2.drawStr(208, 63, timeString);
+      }
 
-
-      //u8g2.sendBuffer(); // nie piszemy po ekranie w tej funkcji tylko przygotowujemy bufor. Nie mozna pisac podczas pracy scrollera
+      //u8g2.sendBuffer(); // nie piszemy po ekranie w tej funkcji tylko przygotowujemy bufor. Nie mozna pisac podczas pracy scrollerara
     }
     else if ((timeDisplay == true) && (audio.isRunning() == false))
     {
@@ -2968,7 +3082,10 @@ void updateTimer()
       }
       char timeString[9];  // Bufor przechowujący czas w formie tekstowej
       
-      snprintf(timeString, sizeof(timeString), "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+      bool showDots = (timeinfo.tm_sec % 2 == 0); // Parzysta sekunda = pokazuj dwukropek
+      //snprintf(timeString, sizeof(timeString), "%2d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+      if (showDots) snprintf(timeString, sizeof(timeString), "%2d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
+      else snprintf(timeString, sizeof(timeString), "%2d %02d", timeinfo.tm_hour, timeinfo.tm_min);
       u8g2.setFont(spleen6x12PL);
       
       if ((displayMode == 0) || (displayMode == 2)) { u8g2.drawStr(0, 63, "                         ");}
@@ -2980,7 +3097,7 @@ void updateTimer()
         if (displayMode == 1) { u8g2.drawStr(0, 33, "... No audio stream ! ...");}
         lastCheckTime = millis(); // Zaktualizuj czas ostatniego sprawdzenia
       }       
-      u8g2.drawStr(208, 63, timeString);
+      u8g2.drawStr(226, 63, timeString);
 
     }
   }
@@ -3158,88 +3275,231 @@ void vuMeter()
   vuMeterR = min(audio.getVUlevel() & 0xFF, 250);  // wyciagamy ze zmiennej typu int16 kanał L
   vuMeterL = min(audio.getVUlevel() >> 8, 250);  // z wyzszej polowki wyciagamy kanal P
 
-  // Aktualizacja peak&hold dla Lewego kanału
-  if (vuMeterL >= peakL) 
+
+ if (vuSmooth)
   {
-    peakL = vuMeterL;
-    peakHoldTimeL = 0;
-  } 
-  else 
-  {
-    if (peakHoldTimeL < peakHoldThreshold) 
+    // LEFT
+    if (vuMeterL > displayVuL) 
     {
-      peakHoldTimeL++;
+      displayVuL += vuRiseSpeed;
+      if (displayVuL > vuMeterL) displayVuL = vuMeterL;
     } 
-    else 
+    else if (vuMeterL < displayVuL) 
     {
-      if (peakL > 0) peakL--;
+      if (displayVuL > vuFallSpeed) 
+      {
+        displayVuL -= vuFallSpeed;
+      } 
+      else 
+      {
+        displayVuL = 0;
+      }
+    }
+
+    // RIGHT
+    if (vuMeterR > displayVuR) 
+    {
+      displayVuR += vuRiseSpeed;
+      if (displayVuR > vuMeterR) displayVuR = vuMeterR;
+    } 
+    else if (vuMeterR < displayVuR) 
+    {
+      if (displayVuR > vuFallSpeed) 
+      {
+        displayVuR -= vuFallSpeed;
+      } 
+      else 
+      {
+        displayVuR = 0;
+      }
     }
   }
 
-  // Aktualizacja peak&hold dla Prawego kanału
-  if (vuMeterR >= peakR) 
+  // Aktualizacja peak&hold dla Lewego kanału
+  if (vuSmooth)
   {
-    peakR = vuMeterR;
-    peakHoldTimeR = 0;
-  } 
-  else 
+    if (vuPeakHoldOn)
+    {
+      // --- Peak L ---
+      if (displayVuL >= peakL) 
+      {
+        peakL = displayVuL;
+        peakHoldTimeL = 0;
+      } 
+      else 
+      {
+        if (peakHoldTimeL < peakHoldThreshold) 
+        {
+          peakHoldTimeL++;
+        } 
+        else 
+        {
+          if (peakL > 0) peakL--;
+        }
+      }
+
+      // --- Peak R ---
+      if (displayVuR >= peakR) 
+      {
+        peakR = displayVuR;
+        peakHoldTimeR = 0;
+      } 
+      else 
+      {
+        if (peakHoldTimeR < peakHoldThreshold) 
+        {
+          peakHoldTimeR++;
+        } 
+        else 
+        {
+          if (peakR > 0) peakR--;
+        }
+      }
+    }    
+  }
+  else
   {
-    if (peakHoldTimeR < peakHoldThreshold) 
+    if (vuPeakHoldOn)
     {
-      peakHoldTimeR++;
-    } 
-    else 
-    {
-      if (peakR > 0) peakR--;
+      if (vuMeterL >= peakL) 
+      {
+        peakL = vuMeterL;
+        peakHoldTimeL = 0;
+      } 
+      else 
+      {
+        if (peakHoldTimeL < peakHoldThreshold) 
+        {
+          peakHoldTimeL++;
+        } 
+        else 
+        {
+          if (peakL > 0) peakL--;
+        }
+      }
+      // Aktualizacja peak&hold dla Prawego kanału
+      if (vuMeterR >= peakR) 
+      {
+        peakR = vuMeterR;
+        peakHoldTimeR = 0;
+      } 
+      else 
+      {
+        if (peakHoldTimeR < peakHoldThreshold) 
+        {
+          peakHoldTimeR++;
+        } 
+        else 
+        {
+          if (peakR > 0) peakR--;
+        }
+      }
     }
   }
+
 
   if (volumeMute == false)  
   {
-    u8g2.setDrawColor(0);
-    u8g2.drawBox(0, vuLy, 256, 3);  //czyszczenie ekranu pod VU meter
-    u8g2.drawBox(0, vuRy, 256, 3);
-    u8g2.setDrawColor(1);
-
-    // Biale pola pod literami L i R
-    u8g2.drawBox(0, vuLy - 3, 7, 7);  
-    u8g2.drawBox(0, vuRy - 3, 7, 7);  
-
-    // Rysujemy litery L i R
-    u8g2.setDrawColor(0);
-    u8g2.setFont(u8g2_font_04b_03_tr);
-    u8g2.drawStr(2, vuLy + 3, "L");
-    u8g2.drawStr(2, vuRy + 3, "R");
-    u8g2.setDrawColor(1);  // Przywracamy białe rysowanie
-
-    if (vuMeterMode == 1)  // tryb 1 ciagle paski
+    if (vuSmooth)
     {
+      u8g2.setDrawColor(0);
+      u8g2.drawBox(0, vuLy, 256, 3);  //czyszczenie ekranu pod VU meter
+      u8g2.drawBox(0, vuRy, 256, 3);
       u8g2.setDrawColor(1);
-      u8g2.drawBox(10, vuLy, vuMeterL, 2);  // rysujemy kreseczki o dlugosci odpowiadajacej wartosci VU
-      u8g2.drawBox(10, vuRy, vuMeterR, 2);
 
-      // Rysowanie peaków jako cienka kreska
-      u8g2.drawBox(9 + peakL, vuLy, 1, 2);
-      u8g2.drawBox(9 + peakR, vuRy, 1, 2);
-    } 
-    else  // vuMeterMode == 0  tryb podstawowy, kreseczki z przerwami
-    { 
-      for (uint8_t vusize = 0; vusize < vuMeterL; vusize++) 
+      // Biale pola pod literami L i R
+      u8g2.drawBox(0, vuLy - 3, 7, 7);  
+      u8g2.drawBox(0, vuRy - 3, 7, 7);  
+
+      // Rysujemy litery L i R
+      u8g2.setDrawColor(0);
+      u8g2.setFont(u8g2_font_04b_03_tr);
+      u8g2.drawStr(2, vuLy + 3, "L");
+      u8g2.drawStr(2, vuRy + 3, "R");
+      u8g2.setDrawColor(1);  // Przywracamy białe rysowanie
+
+      if (vuMeterMode == 1)  // tryb 1 ciagle paski
       {
-        if ((vusize % 9) < 8) u8g2.drawBox(9 + vusize, vuLy, 1, 2); // rysuj tylko 8 pikseli, potem 1px przerwy
-      }  
-	   
-      for (uint8_t vusize = 0; vusize < vuMeterR; vusize++) 
-      {
-        if ((vusize % 9) < 8) u8g2.drawBox(9 + vusize, vuRy, 1, 2); // rysuj tylko 8 pikseli, potem 1px przerwy
+        u8g2.setDrawColor(1);
+        //u8g2.drawBox(10, vuLy, vuMeterL, 2);  // rysujemy kreseczki o dlugosci odpowiadajacej wartosci VU
+        //u8g2.drawBox(10, vuRy, vuMeterR, 2);
+
+        u8g2.drawBox(10, vuLy, displayVuL, 2);  // rysujemy kreseczki o dlugosci odpowiadajacej wartosci VU
+        u8g2.drawBox(10, vuRy, displayVuR, 2);
+
+
+        // Rysowanie peaków jako cienka kreska
+        u8g2.drawBox(9 + peakL, vuLy, 1, 2);
+        u8g2.drawBox(9 + peakR, vuRy, 1, 2);
       } 
-
-      // Peak - kreski w trybie przerywanym
-      u8g2.drawBox(9 + peakL, vuLy, 1, 2);
-      u8g2.drawBox(9 + peakR, vuRy, 1, 2);
-
+      else  // vuMeterMode == 0  tryb podstawowy, kreseczki z przerwami
+      {      
+        for (uint8_t vusize = 0; vusize < displayVuL; vusize++)
+        {
+          if ((vusize % 9) < 8) u8g2.drawBox(9 + vusize, vuLy, 1, 2);//u8g2.drawBox(9 + vusize, vuLy, 1, 2); // rysuj tylko 8 pikseli, potem 1px przerwy, 9 w osi x to odstep na literke
+        }  
+        for (uint8_t vusize = 0; vusize < displayVuR; vusize++)
+        {
+          if ((vusize % 9) < 8) u8g2.drawBox(9 + vusize, vuRy, 1, 2); // rysuj tylko 8 pikseli, potem 1px przerwy, 9 w osi x to odstep na literke
+        }    
+        
+        if (vuPeakHoldOn)
+        {
+          // Peak - kreski w trybie przerywanym
+          u8g2.drawBox(9 + peakL, vuLy, 1, 2);
+          u8g2.drawBox(9 + peakR, vuRy, 1, 2);
+        }
+      }
+         
     }
-  }   
+    else
+    {
+      u8g2.setDrawColor(0);
+      u8g2.drawBox(0, vuLy, 256, 3);  //czyszczenie ekranu pod VU meter
+      u8g2.drawBox(0, vuRy, 256, 3);
+      u8g2.setDrawColor(1);
+
+      // Biale pola pod literami L i R
+      u8g2.drawBox(0, vuLy - 3, 7, 7);  
+      u8g2.drawBox(0, vuRy - 3, 7, 7);  
+
+      // Rysujemy litery L i R
+      u8g2.setDrawColor(0);
+      u8g2.setFont(u8g2_font_04b_03_tr);
+      u8g2.drawStr(2, vuLy + 3, "L");
+      u8g2.drawStr(2, vuRy + 3, "R");
+      u8g2.setDrawColor(1);  // Przywracamy białe rysowanie
+
+      if (vuMeterMode == 1)  // tryb 1 ciagle paski
+      {
+        u8g2.setDrawColor(1);
+        u8g2.drawBox(10, vuLy, vuMeterL, 2);  // rysujemy kreseczki o dlugosci odpowiadajacej wartosci VU
+        u8g2.drawBox(10, vuRy, vuMeterR, 2);
+
+        // Rysowanie peaków jako cienka kreska
+        u8g2.drawBox(9 + peakL, vuLy, 1, 2);
+        u8g2.drawBox(9 + peakR, vuRy, 1, 2);
+      } 
+      else  // vuMeterMode == 0  tryb podstawowy, kreseczki z przerwami
+      {      
+        for (uint8_t vusize = 0; vusize < vuMeterL; vusize++) 
+        {
+          if ((vusize % 9) < 8) u8g2.drawBox(9 + vusize, vuLy, 1, 2);//u8g2.drawBox(9 + vusize, vuLy, 1, 2); // rysuj tylko 8 pikseli, potem 1px przerwy, 9 w osi x to odstep na literke
+        }  
+        for (uint8_t vusize = 0; vusize < vuMeterR; vusize++) 
+        {
+          if ((vusize % 9) < 8) u8g2.drawBox(9 + vusize, vuRy, 1, 2); // rysuj tylko 8 pikseli, potem 1px przerwy, 9 w osi x to odstep na literke
+        } 
+       
+        if (vuPeakHoldOn)
+        {
+          // Peak - kreski w trybie przerywanym
+          u8g2.drawBox(9 + peakL, vuLy, 1, 2);
+          u8g2.drawBox(9 + peakR, vuRy, 1, 2);
+        }
+      }  
+    } // else smooth
+  }  // moute off
 }
 
 void displayClearUnderScroller() // Funkcja odpwoiedzialna za przewijanie informacji strem tittle lub stringstation
@@ -4464,6 +4724,12 @@ void displayConfig()
   u8g2.sendBuffer();
 }
 
+void stationNameSwap()
+{
+  stationNameFromStream = !stationNameFromStream;
+  if (stationNameFromStream) stationNameLenghtCut = 40; else stationNameLenghtCut = 24;
+}
+
 void saveConfig() 
 {
   /*
@@ -4482,7 +4748,7 @@ void saveConfig()
     myFile = SPIFFS.open("/config.txt", FILE_WRITE);
     if (myFile) 
 	  {
-      myFile.println("#### ESP32 Radio Config File ####");
+      myFile.println("#### Evo Web Radio Config File ####");
       myFile.print("Display Brightness =");    myFile.print(displayBrightness); myFile.println(";");
       myFile.print("Dimmer Display Brightness =");    myFile.print(dimmerDisplayBrightness); myFile.println(";");
       myFile.print("Auto Dimmer Time ="); myFile.print(displayAutoDimmerTime); myFile.println(";");
@@ -4498,6 +4764,11 @@ void saveConfig()
       myFile.println("Display Power Save Enabled =" + String(displayPowerSaveEnabled) + ";");  
       myFile.println("Display Power Save Time =" + String(displayPowerSaveTime) + ";");
       myFile.println("Max Volume Extended =" + String(maxVolumeExt) + ";");
+      myFile.println("VU Meter Peak Hold On =" + String(vuPeakHoldOn) + ";");
+      myFile.println("VU Meter Smooth On =" + String(vuSmooth) + ";");
+      myFile.println("VU Meter Rise Speed =" + String(vuRiseSpeed) + ";");
+      myFile.println("VU Meter Fall Speed =" + String(vuFallSpeed) + ";");
+
       myFile.close();
       Serial.println("Aktualizacja config.txt na karcie SPIFFS");
     } 
@@ -4514,7 +4785,7 @@ void saveConfig()
     myFile = SPIFFS.open("/config.txt", FILE_WRITE);
     if (myFile) 
 	  {
-      myFile.println("#### ESP32 Radio Config File ####");
+      myFile.println("#### Evo Web Radio Config File ####");
       myFile.print("Display Brightness =");    myFile.print(displayBrightness); myFile.println(";");
       myFile.print("Dimmer Display Brightness =");    myFile.print(dimmerDisplayBrightness); myFile.println(";");
       myFile.print("Auto Dimmer Time ="); myFile.print(displayAutoDimmerTime); myFile.println(";");
@@ -4530,6 +4801,11 @@ void saveConfig()
       myFile.println("Display Power Save Enabled =" + String(displayPowerSaveEnabled) + ";");  
       myFile.println("Display Power Save Time =" + String(displayPowerSaveTime) + ";");
       myFile.println("Max Volume settings Extended =" + String(maxVolumeExt) + ";");
+      myFile.println("VU Meter Peak Hold On =" + String(vuPeakHoldOn) + ";");
+      myFile.println("VU Meter Smooth On =" + String(vuSmooth) + ";");
+      myFile.println("VU Meter Rise Speed =" + String(vuRiseSpeed) + ";");
+      myFile.println("VU Meter Fall Speed =" + String(vuFallSpeed) + ";");
+
       myFile.close();
       Serial.println("Utworzono i zapisano config.txt na karcie SPIFFS");
     } 
@@ -4554,7 +4830,7 @@ void saveAdcConfig()
     myFile = SPIFFS.open("/adckbd.txt", FILE_WRITE);
     if (myFile) 
 	  {
-      myFile.println("#### ESP32 Radio Config File - ADC Keyboard ####");
+      myFile.println("#### Evo Web2 Radio Config File - ADC Keyboard ####");
       myFile.println("keyboardButtonThreshold_0 =" + String(keyboardButtonThreshold_0) + ";");
       myFile.println("keyboardButtonThreshold_1 =" + String(keyboardButtonThreshold_1) + ";");
       myFile.println("keyboardButtonThreshold_2 =" + String(keyboardButtonThreshold_2) + ";");
@@ -4590,7 +4866,7 @@ void saveAdcConfig()
     myFile = SPIFFS.open("/adckbd.txt", FILE_WRITE);
     if (myFile) 
 	  {
-      myFile.println("#### ESP32 Radio Config File - ADC Keyboard ####");
+      myFile.println("#### Evo Web Radio Config File - ADC Keyboard ####");
       myFile.println("keyboardButtonThreshold_0 =" + String(keyboardButtonThreshold_0) + ";");
       myFile.println("keyboardButtonThreshold_1 =" + String(keyboardButtonThreshold_1) + ";");
       myFile.println("keyboardButtonThreshold_2 =" + String(keyboardButtonThreshold_2) + ";");
@@ -4687,6 +4963,11 @@ void readConfig()
   displayPowerSaveEnabled = configArray[12];
   displayPowerSaveTime = configArray[13];
   maxVolumeExt = configArray[14];
+  vuPeakHoldOn = configArray[15];
+  vuSmooth = configArray[16];
+  vuRiseSpeed = configArray[17];
+  vuFallSpeed = configArray[18];
+
   
   if (maxVolumeExt == 1)
   { 
@@ -4697,6 +4978,7 @@ void readConfig()
     maxVolume = 21;
   }
   audio.setVolumeSteps(maxVolume);
+  //stationNameSwap();
 }
 
 
@@ -5321,7 +5603,7 @@ void setup()
 {
   // Inicjalizuj komunikację szeregową (Serial)
   Serial.begin(115200);
-  Serial.println("---------- START of ESP32 Network Radio -----------");
+  Serial.println("---------- START of Evo Web Radio -----------");
   
   psramData = (unsigned char *)ps_malloc(PSRAM_lenght * sizeof(unsigned char));
 
@@ -5364,7 +5646,7 @@ void setup()
 
   // Inicjalizuj interfejs SPI wyświetlacza
   SPI.begin(SPI_SCK_OLED, SPI_MISO_OLED, SPI_MOSI_OLED);
-  SPI.setFrequency(1000000);
+  SPI.setFrequency(2000000);
 
   // Inicjalizuj wyświetlacz i odczekaj 250 milisekund na włączenie
   u8g2.begin();
@@ -5449,7 +5731,7 @@ void setup()
   Serial.println(station_nr);
 
   // Rozpoczęcie konfiguracji Wi-Fi i połączenie z siecią, jeśli konieczne
-  if (wifiManager.autoConnect("ESP32-Radio")) 
+  if (wifiManager.autoConnect("Evo-Radio")) 
   {
     Serial.println("Połączono z siecią WiFi");
     //u8g2.clearBuffer();
@@ -5464,7 +5746,8 @@ void setup()
     u8g2.drawStr(90, 62, currentIP.c_str());   //wyswietlenie IP
     u8g2.sendBuffer();
     delay(1000);  // odczekaj 1 sek przed wymazaniem numeru IP
-    
+
+
     if (MDNS.begin(hostname)) { Serial.println("mDNS wystartowal, adres: " + String(hostname) + ".local w przeglądarce"); }
     
     //configTime(gmtOffset_sec, daylightOffset_sec, ntpServer1, ntpServer2 );
@@ -5613,7 +5896,7 @@ void setup()
       u8g2.setDrawColor(1);
       u8g2.clearBuffer();
       u8g2.setFont(spleen6x12PL);     
-      u8g2.setCursor(5, 12); u8g2.print("ESP-Radio, OTA Firwmare Update");
+      u8g2.setCursor(5, 12); u8g2.print("Evo Radio, OTA Firwmare Update");
       u8g2.sendBuffer();
 
       String html = "";
@@ -5625,7 +5908,7 @@ void setup()
       html += "<title>ESP OTA Update</title>";
       html += "<style>";
       html += "body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6; color: #333; padding: 40px; text-align: center; }";
-      html += "h2 { margin-bottom: 30px; color: #111; }";
+      html += "h2 { margin-bottom: 30px; color: #111; font-size: 1.3rem;}";
       html += "#uploadSection { background-color: white; padding: 30px; border-radius: 8px; display: inline-block; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); }";
       html += "input[type='file'] { padding: 10px; }";
       html += "button { margin-top: 20px; padding: 10px 20px; background-color: #4CAF50; border: none; color: white; font-size: 16px; border-radius: 5px; cursor: pointer; }";
@@ -5640,7 +5923,7 @@ void setup()
       html += "</head>";
       html += "<body>";
       html += "<div id='uploadSection'>";
-      html += "<h2>ESP32 Radio - OTA Firmware Update</h2>";
+      html += "<h2>Evo Web Radio - OTA Firmware Update</h2>";
       html += "<input type='file' id='fileInput' name='update' /><br />";
       html += "<div id='fileInfo'>No file selected</div>";
       html += "<button id='uploadBtn'>Upload</button>";
@@ -5715,7 +5998,7 @@ void setup()
       String html = "<!DOCTYPE html><html><head>";
       html += "<meta charset=\"UTF-8\">";
       html = "<html><head><title>Edit File</title></head><body>";
-      html += "<h2>Editing: " + filename + "</h2>";
+      html += "<h2 style='font-size: 1.3rem;'>Editing: " + filename + "</h2>";
       html += "<form method='POST' action='/save'>";
       html += "<input type='hidden' name='filename' value='" + filename + "'>";
       html += "<textarea name='content' rows='100' cols='130'>";
@@ -5764,7 +6047,7 @@ void setup()
     {
       String html = String(list_html) + String("\n");
       
-      html += "<body><h1>ESP32 Radio - SPIFFS card:</h1>" + String("\n");
+      html += "<body><h2 style='font-size: 1.3rem;'>Evo Web Radio - SPIFFS card:</h2>" + String("\n");
         
       html += "<form action=\"/upload\" method=\"POST\" enctype=\"multipart/form-data\">";
       html += "<input type=\"file\" name=\"file\">";
@@ -5795,6 +6078,11 @@ void setup()
 
       server.on("/config", HTTP_GET, [](AsyncWebServerRequest *request) {
       String html = String(config_html);
+      
+  
+      html.replace("%D10", String(vuRiseSpeed).c_str());
+      html.replace("%D11", String(vuFallSpeed).c_str());
+
       html.replace("%D1", String(displayBrightness).c_str());
       html.replace("%D2", String(dimmerDisplayBrightness).c_str());
       html.replace("%D3", String(displayAutoDimmerTime).c_str());
@@ -5808,6 +6096,15 @@ void setup()
       html.replace("%S10", displayPowerSaveEnabled ? "" : " selected");
       html.replace("%S11", maxVolumeExt ? " selected" : "");
       html.replace("%S12", maxVolumeExt ? "" : " selected");
+      html.replace("%S13", vuPeakHoldOn ? " selected" : "");
+      html.replace("%S14", vuPeakHoldOn ? "" : " selected");
+
+      html.replace("%S15", vuSmooth ? " selected" : "");
+      html.replace("%S16", vuSmooth ? "" : " selected");
+
+      html.replace("%S17", stationNameFromStream ? " selected" : "");
+      html.replace("%S18", stationNameFromStream ? "" : " selected");
+      
       html.replace("%S1", displayAutoDimmerOn ? " selected" : "");
       html.replace("%S2", displayAutoDimmerOn ? "" : " selected");
       html.replace("%S3", timeVoiceInfoEveryHour ? " selected" : "");
@@ -5965,8 +6262,20 @@ void setup()
       if (request->hasParam("maxVolumeExt", true)) {
         maxVolumeExt = request->getParam("maxVolumeExt", true)->value() == "1";
       }  
+      if (request->hasParam("vuPeakHoldOn", true)) {
+        vuPeakHoldOn = request->getParam("vuPeakHoldOn", true)->value() == "1";
+      }  
+      if (request->hasParam("vuSmooth", true)) {
+        vuSmooth = request->getParam("vuSmooth", true)->value() == "1";
+      }
+      if (request->hasParam("vuRiseSpeed", true)) {
+        vuRiseSpeed = request->getParam("vuRiseSpeed", true)->value().toInt();
+      }
+      if (request->hasParam("vuFallSpeed", true)) {
+        vuFallSpeed = request->getParam("vuFallSpeed", true)->value().toInt();
+      }  
 
-      request->send(200, "text/html", "<h1>Configuration Updated!</h1><a href='/menu'>Go Back</a>");
+      request->send(200, "text/html", "<h1>Config Settings Updated!</h1><a href='/menu'>Go Back</a>");
       saveConfig(); 
       readConfig();
       //ODswiezenie ekranu OLED po zmianach konfiguracji
@@ -6471,7 +6780,7 @@ void loop()
       else if (ir_code == rcCmdSrc) 
       {
         displayMode++;
-        if (displayMode > 2) {displayMode = 0;}
+        if (displayMode > 3) {displayMode = 0;}
         displayRadio();
         //u8g2.sendBuffer();
         clearFlags();
@@ -6479,15 +6788,20 @@ void loop()
       }
       else if (ir_code == rcCmdRed) 
       {     
-       //voiceTime();
-        vuMeterMode = !vuMeterMode;
-        
+       //voiceTime();   
+        //vuMeterMode = !vuMeterMode;
+        vuSmooth = !vuSmooth;
       }
       else if (ir_code == rcCmdGreen) 
       {
         //voiceTimeEn();
-        voiceTime();
-              
+        //voiceTime();      
+        //vuPeakHoldOn = !vuPeakHoldOn;
+        stationNameSwap();
+        
+        //stationNameFromStream = !stationNameFromStream;
+        //if (stationNameFromStream) stationNameLenghtCut = 40; else stationNameLenghtCut = 24;
+
       }   
       else if (ir_code == rcCmdBankMinus) 
       {
@@ -6561,12 +6875,28 @@ void loop()
       if (debugAudioBuffor == true) 
       { 
         bufforAudioInfo(); 
-        drawSignalPower(194,63,1); // Narysuj wskaznik zasiegu WiFi X,Y z wydrukiem na terminalu     
+        //drawSignalPower(194,63,1,0); // Narysuj wskaznik zasiegu WiFi X,Y z wydrukiem na terminalu 
+        drawSignalPower(210,63,1,0);     
       }
       else
       {
-        if ((displayMode == 0) || (displayMode == 2)) {drawSignalPower(194,63,0);} // x, y, 0-bez wydruku mocy sygnału na terminalu , 1-z wydrukiem
-        if ((displayMode == 1) && (volumeMute == false)) {drawSignalPower(244,47,0);}
+        if ((displayMode == 0) || (displayMode == 2)) 
+        {
+          //drawSignalPower(194,63,0);
+          //u8g2.setFont(u8g2_font_04b_03_tr);
+          //u8g2.drawStr(200,59,"wi");
+          //u8g2.drawStr(203,64,"fi");
+          
+          // Antenka w dolnej lini
+          u8g2.drawLine(204,55,204,62); // kreska srodkowa
+          u8g2.drawLine(204,59,201,55); // lewe ramie
+          u8g2.drawLine(204,59,207,55); // prawe ramie
+
+          u8g2.setFont(spleen6x12PL);
+          drawSignalPower(210,63,0,0); // x, y, 0-bez wydruku mocy sygnału na terminalu , 1-z wydrukiem, mode 
+
+        } 
+        if ((displayMode == 1) && (volumeMute == false)) {drawSignalPower(244,47,0,1);}
       }
       
       if ((audioInfoRefresh == true) && (displayActive == false)) // Zmiana streamtitle - wymaga odswiezenia na wyswietlaczu
@@ -6581,7 +6911,7 @@ void loop()
         displayRadio();
       } 
 
-      if (wsAudioRefresh == true)
+      if (wsAudioRefresh == true) // Web Socket StremInfo wymaga odswiezenia
       {
         wsAudioRefresh = false;
         wsStreamInfoRefresh();
@@ -6610,10 +6940,9 @@ void loop()
     u8g2.sendBuffer();  // rysujemy całą zawartosc ekranu.
    
   }
+  
 
 
-
- 
   //runTime2 = esp_timer_get_time();
   //runTime = runTime2 - runTime1;  
 }
