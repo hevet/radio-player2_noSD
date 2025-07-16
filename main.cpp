@@ -24,7 +24,7 @@
 #include "font.h"              // Plik nagłówkowy z czcionką
 
 // Deklaracja wersji oprogramowania i nazwy hosta widocznego w routerze oraz na ekranie OLED i stronie www
-#define softwareRev "v3.18.12"  // Wersja oprogramowania radia
+#define softwareRev "v3.18.13"  // Wersja oprogramowania radia
 #define hostname "evoradio"   // Definicja nazwy hosta widoczna na zewnątrz
 
 
@@ -2060,7 +2060,7 @@ void audio_info(const char *info)
   {
     // Przytnij tekst od pozycji "BitRate:" do końca linii
     bitrateString = String(info).substring(bitrateIndex + 8, String(info).indexOf('\n', bitrateIndex));
-    bitrateStringInt = bitrateString.toInt();  // przliczenie bps na Kbps
+    bitrateStringInt = bitrateString.toInt();  // przeliczenie bps na Kbps
     bitrateStringInt = bitrateStringInt / 1000;
     bitrateString = String(bitrateStringInt);
     bitratePresent = true;
@@ -2941,6 +2941,7 @@ void displayPowerSave(bool saveON)
 void updateTimer() 
 {
   u8g2.setDrawColor(1);  // Ustaw kolor na biały
+  bool showDots;
 
   if (timeDisplay == true) 
   {
@@ -2990,7 +2991,7 @@ void updateTimer()
         return;  // Zakończ funkcję, gdy nie udało się uzyskać czasu
       }
 
-      bool showDots = (timeinfo.tm_sec % 2 == 0); // Parzysta sekunda = pokazuj dwukropek
+      showDots = (timeinfo.tm_sec % 2 == 0); // Parzysta sekunda = pokazuj dwukropek
 
       // Konwertuj godzinę, minutę i sekundę na stringi w formacie "HH:MM:SS"
       char timeString[9];  // Bufor przechowujący czas w formie tekstowej
@@ -3075,14 +3076,15 @@ void updateTimer()
       displayPowerSave(0); 
       // Struktura przechowująca informacje o czasie
       struct tm timeinfo;
+
       if (!getLocalTime(&timeinfo, 5)) 
       {
         Serial.println("Nie udało się uzyskać czasu");
         return;  // Zakończ funkcję, gdy nie udało się uzyskać czasu
       }
+      showDots = (timeinfo.tm_sec % 2 == 0); // Parzysta sekunda = pokazuj dwukropek
       char timeString[9];  // Bufor przechowujący czas w formie tekstowej
       
-      bool showDots = (timeinfo.tm_sec % 2 == 0); // Parzysta sekunda = pokazuj dwukropek
       //snprintf(timeString, sizeof(timeString), "%2d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
       if (showDots) snprintf(timeString, sizeof(timeString), "%2d:%02d", timeinfo.tm_hour, timeinfo.tm_min);
       else snprintf(timeString, sizeof(timeString), "%2d %02d", timeinfo.tm_hour, timeinfo.tm_min);
@@ -3106,7 +3108,7 @@ void updateTimer()
 void saveEqualizerOnSPIFFS() 
 {
   u8g2.clearBuffer();
-  u8g2.setFont(u8g2_font_fub14_tf); // cziocnka 14x11
+  u8g2.setFont(u8g2_font_fub14_tf); // czcionka 14x11
   u8g2.drawStr(1, 33, "Saving equalizer settings"); // 8 znakow  x 11 szer
   u8g2.sendBuffer();
   
@@ -3169,7 +3171,7 @@ void readEqualizerFromSPIFFS()
   // Sprawdź, czy karta SPIFFS jest dostępna
   if (!SPIFFS.begin()) 
   {
-    Serial.println("Nie można znaleźć karty SPIFFS, ustawiam domyślne wartości filtrow Equalziera.");
+    Serial.println("Nie można znaleźć karty SPIFFS, ustawiam domyślne wartości filtrow Equalizera.");
     toneHiValue = 0;  // Domyślna wartość filtra gdy brak karty SPIFFS
 	  toneMidValue = 0; // Domyślna wartość filtra gdy brak karty SPIFFS
 	  toneLowValue = 0; // Domyślna wartość filtra gdy brak karty SPIFFS
@@ -4301,7 +4303,7 @@ void recoveryModeCheck()
 
       // Wyświetlanie menu
       u8g2.clearBuffer();
-      u8g2.drawStr(1, 14, "[ -- Rotate Enckoder -- ]");
+      u8g2.drawStr(1, 14, "[ -- Rotate Encoder -- ]");
 
       if (recoveryMode == 0)
       {
@@ -4768,6 +4770,7 @@ void saveConfig()
       myFile.println("VU Meter Smooth On =" + String(vuSmooth) + ";");
       myFile.println("VU Meter Rise Speed =" + String(vuRiseSpeed) + ";");
       myFile.println("VU Meter Fall Speed =" + String(vuFallSpeed) + ";");
+      myFile.println("Station Name Read From Stream =" + String(stationNameFromStream) + ";");
 
       myFile.close();
       Serial.println("Aktualizacja config.txt na karcie SPIFFS");
@@ -4805,6 +4808,7 @@ void saveConfig()
       myFile.println("VU Meter Smooth On =" + String(vuSmooth) + ";");
       myFile.println("VU Meter Rise Speed =" + String(vuRiseSpeed) + ";");
       myFile.println("VU Meter Fall Speed =" + String(vuFallSpeed) + ";");
+      myFile.println("Station Name Read From Stream =" + String(stationNameFromStream) + ";");
 
       myFile.close();
       Serial.println("Utworzono i zapisano config.txt na karcie SPIFFS");
@@ -4967,6 +4971,7 @@ void readConfig()
   vuSmooth = configArray[16];
   vuRiseSpeed = configArray[17];
   vuFallSpeed = configArray[18];
+  stationNameFromStream = configArray[19];
 
   
   if (maxVolumeExt == 1)
@@ -6273,6 +6278,9 @@ void setup()
       }
       if (request->hasParam("vuFallSpeed", true)) {
         vuFallSpeed = request->getParam("vuFallSpeed", true)->value().toInt();
+      }
+      if (request->hasParam("stationNameFromStream", true)) {
+        stationNameFromStream = request->getParam("stationNameFromStream", true)->value() == "1";
       }  
 
       request->send(200, "text/html", "<h1>Config Settings Updated!</h1><a href='/menu'>Go Back</a>");
@@ -6946,4 +6954,3 @@ void loop()
   //runTime2 = esp_timer_get_time();
   //runTime = runTime2 - runTime1;  
 }
-
